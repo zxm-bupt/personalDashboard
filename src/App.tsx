@@ -21,7 +21,7 @@ function App() {
     clockIn,
     clockOut,
     addFocusSession,
-    markResourceOpened,
+    openTaskResource,
     exportData,
     clearAll,
   } = useWorkbench()
@@ -77,7 +77,7 @@ function App() {
             onToggleDone={toggleTaskDone}
             onEditTask={openEditTask}
             onDeleteTask={handleDeleteTask}
-            onOpenResource={markResourceOpened}
+            onOpenResource={openTaskResource}
             onNewTask={openNewTask}
           />
         )}
@@ -91,7 +91,7 @@ function App() {
             onToggleDone={toggleTaskDone}
             onEditTask={openEditTask}
             onDeleteTask={handleDeleteTask}
-            onOpenResource={markResourceOpened}
+            onOpenResource={openTaskResource}
             onNewTask={openNewTask}
           />
         )}

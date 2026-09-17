@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
 use tauri::{Manager, State};
@@ -10,7 +11,8 @@ struct TaskResource {
     id: String,
     kind: String,
     title: String,
-    url: String,
+    #[serde(alias = "url")]
+    target: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -319,6 +321,30 @@ fn save_workbench(db: State<Db>, payload: WorkbenchState) -> Result<(), String> 
 }
 
 #[tauri::command]
+fn get_os() -> String {
+    std::env::consts::OS.to_string()
+}
+
+#[tauri::command]
+fn open_resource(kind: String, target: String) -> Result<(), String> {
+    if kind == "url" {
+        return open_external(target);
+    }
+
+    if kind != "file" && kind != "app" {
+        return Err("不支持的资源类型".to_string());
+    }
+
+    let path = Path::new(&target);
+    if !path.exists() {
+        return Err("RESOURCE_NOT_FOUND".to_string());
+    }
+
+    open_path_command(path).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn open_external(url: String) -> Result<(), String> {
     let url = url.trim();
 
@@ -335,10 +361,23 @@ fn open_url_command(url: &str) -> std::io::Result<std::process::Child> {
     Command::new("open").arg(url).spawn()
 }
 
+#[cfg(target_os = "macos")]
+fn open_path_command(path: &Path) -> std::io::Result<std::process::Child> {
+    Command::new("open").arg(path).spawn()
+}
+
 #[cfg(target_os = "windows")]
 fn open_url_command(url: &str) -> std::io::Result<std::process::Child> {
     Command::new("cmd")
         .args(["/C", "start", "", url])
+        .spawn()
+}
+
+#[cfg(target_os = "windows")]
+fn open_path_command(path: &Path) -> std::io::Result<std::process::Child> {
+    Command::new("cmd")
+        .args(["/C", "start", ""])
+        .arg(path)
         .spawn()
 }
 
@@ -347,8 +386,14 @@ fn open_url_command(url: &str) -> std::io::Result<std::process::Child> {
     Command::new("xdg-open").arg(url).spawn()
 }
 
+#[cfg(all(unix, not(target_os = "macos")))]
+fn open_path_command(path: &Path) -> std::io::Result<std::process::Child> {
+    Command::new("xdg-open").arg(path).spawn()
+}
+
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_dir)?;
@@ -362,6 +407,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_workbench,
             save_workbench,
+            get_os,
+            open_resource,
             open_external
         ])
         .run(tauri::generate_context!())

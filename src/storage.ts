@@ -1,4 +1,4 @@
-import type { WorkbenchState } from './types'
+import type { ResourceKind, WorkbenchState } from './types'
 import { createId, nowIso, toDateKey } from './utils'
 
 const STORAGE_KEY = 'personal-workbench:v1'
@@ -19,7 +19,7 @@ function createSeedState(): WorkbenchState {
             id: createId(),
             kind: 'url',
             title: 'Vite 文档',
-            url: 'https://vite.dev',
+            target: 'https://vite.dev',
           },
         ],
         createdAt: now,
@@ -38,7 +38,7 @@ function createSeedState(): WorkbenchState {
             id: createId(),
             kind: 'url',
             title: 'React 文档',
-            url: 'https://react.dev',
+            target: 'https://react.dev',
           },
         ],
         createdAt: now,
@@ -57,8 +57,38 @@ export function loadState(): WorkbenchState {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return createSeedState()
     const parsed = JSON.parse(raw) as Partial<WorkbenchState>
+    const tasks = Array.isArray(parsed.tasks)
+      ? parsed.tasks.map((task) => {
+          const legacyTask = task as unknown as {
+            resources?: Array<{
+              id?: string
+              kind?: string
+              title?: string
+              target?: string
+              url?: string
+            }>
+          }
+
+          return {
+            ...task,
+            resources: Array.isArray(legacyTask.resources)
+              ? legacyTask.resources
+                  .map((resource) => ({
+                    id: resource.id ?? createId(),
+                    kind: (resource.kind === 'file' || resource.kind === 'app'
+                      ? resource.kind
+                      : 'url') as ResourceKind,
+                    title: resource.title ?? '',
+                    target: resource.target ?? resource.url ?? '',
+                  }))
+                  .filter((resource) => resource.title || resource.target)
+              : [],
+          }
+        })
+      : []
+
     return {
-      tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+      tasks,
       timeEntries: Array.isArray(parsed.timeEntries) ? parsed.timeEntries : [],
       checkins: Array.isArray(parsed.checkins) ? parsed.checkins : [],
       lastOpenedResourceId: parsed.lastOpenedResourceId ?? null,

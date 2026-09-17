@@ -2,11 +2,13 @@ export type Priority = 'low' | 'medium' | 'high' | 'urgent'
 export type TaskStatus = 'todo' | 'doing' | 'done'
 export type TimeEntryType = 'focus' | 'checkin'
 
+export type ResourceKind = 'url' | 'file' | 'app'
+
 export interface TaskResource {
   id: string
-  kind: 'url'
+  kind: ResourceKind
   title: string
-  url: string
+  target: string
 }
 
 export interface Task {
@@ -46,16 +48,19 @@ export interface WorkbenchState {
   lastOpenedResourceId: string | null
 }
 
+export interface ResourceInput {
+  id?: string
+  kind: ResourceKind
+  title: string
+  target: string
+}
+
 export interface TaskInput {
   title: string
   description: string
   dueAt: string | null
   priority: Priority
-  resources: Array<{
-    id?: string
-    title: string
-    url: string
-  }>
+  resources: ResourceInput[]
 }
 
 export type TaskFilter = 'all' | 'today' | 'overdue' | 'done'

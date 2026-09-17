@@ -1,5 +1,4 @@
-import { openExternal } from '../lib/tauri'
-import type { Checkin, Task, TimeEntry } from '../types'
+import type { Checkin, Task, TaskResource, TimeEntry } from '../types'
 import {
   durationSeconds,
   formatDuration,
@@ -22,7 +21,7 @@ interface DashboardPageProps {
   onToggleDone: (taskId: string) => void
   onEditTask: (task: Task) => void
   onDeleteTask: (task: Task) => void
-  onOpenResource: (resourceId: string) => void
+  onOpenResource: (taskId: string, resource: TaskResource) => void
   onNewTask: () => void
 }
 
@@ -143,36 +142,32 @@ export function DashboardPage({
         <section className="panel">
           <div className="section-header compact">
             <div>
-              <h2>网页资源</h2>
-              <p>点击直接在新标签页打开</p>
+              <h2>任务资源</h2>
+              <p>点击打开网页、文件或应用</p>
             </div>
           </div>
 
           {resources.length > 0 ? (
             <div className="quick-links">
               {resources.map(({ task, resource }) => (
-                <a
+                <button
                   key={resource.id}
+                  type="button"
                   className="quick-link"
-                  href={resource.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(event) => {
-                    event.preventDefault()
-                    onOpenResource(resource.id)
-                    void openExternal(resource.url)
-                  }}
+                  onClick={() => onOpenResource(task.id, resource)}
                 >
-                  <span className="quick-link-icon">↗</span>
+                  <span className="quick-link-icon">
+                    {resource.kind === 'url' ? '↗' : resource.kind === 'file' ? '▤' : '▣'}
+                  </span>
                   <span>
                     <strong>{resource.title}</strong>
                     <small>{task.title}</small>
                   </span>
-                </a>
+                </button>
               ))}
             </div>
           ) : (
-            <p className="muted">还没有网页资源，创建任务时添加即可。</p>
+            <p className="muted">还没有任务资源，创建任务时添加即可。</p>
           )}
         </section>
 

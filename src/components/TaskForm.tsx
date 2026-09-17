@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import type { Priority, Task, TaskInput } from '../types'
+import { isTauri, pickResource } from '../lib/tauri'
+import type { Priority, ResourceKind, Task, TaskInput } from '../types'
 import { fromDateTimeLocalValue, normalizeUrl, toDateTimeLocalValue } from '../utils'
 
 interface TaskFormProps {
@@ -11,14 +12,32 @@ interface TaskFormProps {
 
 interface ResourceDraft {
   id?: string
+  kind: ResourceKind
   title: string
-  url: string
+  target: string
 }
 
 const emptyResource = (): ResourceDraft => ({
+  kind: 'url',
   title: '',
-  url: '',
+  target: '',
 })
+
+function resourcePlaceholder(kind: ResourceKind): string {
+  if (kind === 'url') return 'https://...'
+  if (kind === 'file') return '/Users/you/Documents/file.pdf'
+  return '/Applications/SomeApp.app'
+}
+
+function resourceKindLabel(kind: ResourceKind): string {
+  if (kind === 'url') return '网页'
+  if (kind === 'file') return '文件'
+  return '应用'
+}
+
+function fileNameFromPath(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? ''
+}
 
 export function TaskForm({ open, task, onClose, onSubmit }: TaskFormProps) {
   const [title, setTitle] = useState(task?.title ?? '')
@@ -29,14 +48,34 @@ export function TaskForm({ open, task, onClose, onSubmit }: TaskFormProps) {
     task && task.resources.length > 0
       ? task.resources.map((resource) => ({
           id: resource.id,
+          kind: resource.kind,
           title: resource.title,
-          url: resource.url,
+          target: resource.target,
         }))
       : [emptyResource()],
   )
   const [error, setError] = useState('')
+  const desktopAvailable = isTauri()
 
   if (!open) return null
+
+  const handlePickResource = async (index: number) => {
+    const resource = resources[index]
+    const selected = await pickResource(resource.kind)
+    if (!selected) return
+
+    setResources((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              target: selected,
+              title: item.title.trim() || fileNameFromPath(selected),
+            }
+          : item,
+      ),
+    )
+  }
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -48,17 +87,21 @@ export function TaskForm({ open, task, onClose, onSubmit }: TaskFormProps) {
 
     const cleanedResources = resources
       .map((resource) => ({
-        ...resource,
+        id: resource.id,
+        kind: resource.kind,
         title: resource.title.trim(),
-        url: normalizeUrl(resource.url),
+        target:
+          resource.kind === 'url'
+            ? normalizeUrl(resource.target)
+            : resource.target.trim(),
       }))
-      .filter((resource) => resource.title || resource.url)
+      .filter((resource) => resource.title || resource.target)
 
     const invalidResource = cleanedResources.find(
-      (resource) => !resource.title || !resource.url,
+      (resource) => !resource.title || !resource.target,
     )
     if (invalidResource) {
-      setError('网页资源需要同时填写名称和 URL')
+      setError('每个资源都需要填写名称和地址/路径')
       return
     }
 
@@ -132,21 +175,47 @@ export function TaskForm({ open, task, onClose, onSubmit }: TaskFormProps) {
           <div className="resource-editor">
             <div className="section-heading">
               <div>
-                <span>网页资源</span>
-                <small>Web 版仅支持 URL，后续桌面版可扩展文件和软件</small>
+                <span>任务资源</span>
+                <small>
+                  {desktopAvailable
+                    ? '支持网页、本地文件和本地应用'
+                    : 'Web 版仅支持网页 URL，桌面版支持本地文件和本地应用'}
+                </small>
               </div>
               <button
                 type="button"
                 className="button ghost small"
                 onClick={() => setResources((current) => [...current, emptyResource()])}
               >
-                + 添加链接
+                + 添加资源
               </button>
             </div>
 
             <div className="resource-rows">
               {resources.map((resource, index) => (
                 <div className="resource-row" key={resource.id ?? index}>
+                  <select
+                    className="resource-kind"
+                    value={resource.kind}
+                    onChange={(event) =>
+                      setResources((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? {
+                                ...item,
+                                kind: event.target.value as ResourceKind,
+                                target: '',
+                              }
+                            : item,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="url">{resourceKindLabel('url')}</option>
+                    {desktopAvailable && <option value="file">{resourceKindLabel('file')}</option>}
+                    {desktopAvailable && <option value="app">{resourceKindLabel('app')}</option>}
+                  </select>
+
                   <input
                     value={resource.title}
                     onChange={(event) =>
@@ -156,19 +225,33 @@ export function TaskForm({ open, task, onClose, onSubmit }: TaskFormProps) {
                         ),
                       )
                     }
-                    placeholder="链接名称"
+                    placeholder="资源名称"
                   />
+
                   <input
-                    value={resource.url}
+                    value={resource.target}
                     onChange={(event) =>
                       setResources((current) =>
                         current.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, url: event.target.value } : item,
+                          itemIndex === index ? { ...item, target: event.target.value } : item,
                         ),
                       )
                     }
-                    placeholder="https://..."
+                    placeholder={resourcePlaceholder(resource.kind)}
                   />
+
+                  <div className="resource-picker-slot">
+                    {resource.kind !== 'url' && desktopAvailable && (
+                      <button
+                        type="button"
+                        className="button ghost small resource-picker"
+                        onClick={() => void handlePickResource(index)}
+                      >
+                        选择
+                      </button>
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     className="icon-button"

@@ -1,13 +1,24 @@
+import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createEmptyState } from '../storage'
 import { loadWorkbench, saveWorkbench } from '../data/workbenchRepository'
-import type { Checkin, Task, TaskInput, TimeEntry, WorkbenchState } from '../types'
+import { isTauri, openExternal } from '../lib/tauri'
+import type { Checkin, ResourceInput, Task, TaskInput, TaskResource, TimeEntry, WorkbenchState } from '../types'
 import { createId, nowIso, toDateKey } from '../utils'
 
 function endOpenFocus(entries: TimeEntry[], at: string): TimeEntry[] {
   return entries.map((entry) =>
     entry.type === 'focus' && !entry.endedAt ? { ...entry, endedAt: at } : entry,
   )
+}
+
+function normalizeResource(resource: ResourceInput): TaskResource {
+  return {
+    id: resource.id ?? createId(),
+    kind: resource.kind,
+    title: resource.title.trim(),
+    target: resource.target.trim(),
+  }
 }
 
 export function useWorkbench() {
@@ -61,13 +72,8 @@ export function useWorkbench() {
       priority: input.priority,
       status: 'todo',
       resources: input.resources
-        .filter((resource) => resource.title.trim() && resource.url.trim())
-        .map((resource) => ({
-          id: resource.id ?? createId(),
-          kind: 'url' as const,
-          title: resource.title.trim(),
-          url: resource.url.trim(),
-        })),
+        .filter((resource) => resource.title.trim() && resource.target.trim())
+        .map(normalizeResource),
       createdAt: timestamp,
       updatedAt: timestamp,
       completedAt: null,
@@ -89,13 +95,8 @@ export function useWorkbench() {
           dueAt: input.dueAt,
           priority: input.priority,
           resources: input.resources
-            .filter((resource) => resource.title.trim() && resource.url.trim())
-            .map((resource) => ({
-              id: resource.id ?? createId(),
-              kind: 'url' as const,
-              title: resource.title.trim(),
-              url: resource.url.trim(),
-            })),
+            .filter((resource) => resource.title.trim() && resource.target.trim())
+            .map(normalizeResource),
           updatedAt: nowIso(),
         }
       }),
@@ -240,9 +241,60 @@ export function useWorkbench() {
     [],
   )
 
+  const removeResource = useCallback((taskId: string, resourceId: string) => {
+    setState((previous) => ({
+      ...previous,
+      tasks: previous.tasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              resources: task.resources.filter((resource) => resource.id !== resourceId),
+              updatedAt: nowIso(),
+            }
+          : task,
+      ),
+    }))
+  }, [])
+
   const markResourceOpened = useCallback((resourceId: string) => {
     setState((previous) => ({ ...previous, lastOpenedResourceId: resourceId }))
   }, [])
+
+  const openTaskResource = useCallback(
+    async (taskId: string, resource: TaskResource) => {
+      markResourceOpened(resource.id)
+
+      if (resource.kind === 'url') {
+        await openExternal(resource.target)
+        return
+      }
+
+      if (!isTauri()) {
+        window.alert('本地文件和软件只能在桌面版中打开。')
+        return
+      }
+
+      try {
+        await invoke('open_resource', {
+          kind: resource.kind,
+          target: resource.target,
+        })
+      } catch (error) {
+        const message = String(error)
+
+        if (message.includes('RESOURCE_NOT_FOUND')) {
+          const shouldRemove = window.confirm(
+            `资源“${resource.title}”不存在或已被删除，是否取消它与当前任务的关联？`,
+          )
+          if (shouldRemove) removeResource(taskId, resource.id)
+          return
+        }
+
+        window.alert(`打开资源失败：${message}`)
+      }
+    },
+    [markResourceOpened, removeResource],
+  )
 
   const exportData = useCallback(() => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
@@ -275,6 +327,7 @@ export function useWorkbench() {
     updateResourceTitle,
     addFocusSession,
     markResourceOpened,
+    openTaskResource,
     exportData,
     clearAll,
   }

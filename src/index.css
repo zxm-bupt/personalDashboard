@@ -672,12 +672,16 @@ small {
 
 .quick-link {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 10px;
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface-muted);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
   text-decoration: none;
 }
 
@@ -806,7 +810,8 @@ small {
 .field input,
 .field textarea,
 .field select,
-.resource-row input {
+.resource-row input,
+.resource-row select {
   width: 100%;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
@@ -824,7 +829,8 @@ small {
 .field input:focus,
 .field textarea:focus,
 .field select:focus,
-.resource-row input:focus {
+.resource-row input:focus,
+.resource-row select:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-soft);
 }
@@ -927,13 +933,23 @@ small {
 
 .resource-row {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr) 32px;
+  grid-template-columns: 96px minmax(0, 0.8fr) minmax(0, 1.4fr) 64px 32px;
   align-items: center;
   gap: 8px;
 }
 
-.resource-row input {
+.resource-row input,
+.resource-row select {
   padding: 9px 10px;
+}
+
+.resource-picker-slot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.resource-picker {
+  white-space: nowrap;
 }
 
 .form-error {
@@ -1111,9 +1127,16 @@ small {
     grid-template-columns: 1fr 32px;
   }
 
-  .resource-row input:first-child {
+  .resource-kind,
+  .resource-row > input:nth-of-type(1),
+  .resource-row > input:nth-of-type(2) {
     grid-column: 1 / -1;
   }
+
+  .resource-picker-slot {
+    grid-column: 1 / 2;
+  }
+
 
   .time-row {
     grid-template-columns: 52px minmax(0, 1fr);

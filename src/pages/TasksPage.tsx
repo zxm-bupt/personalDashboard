@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { TaskCard } from '../components/TaskCard'
-import type { Task, TaskFilter } from '../types'
+import type { Task, TaskFilter, TaskResource } from '../types'
 import { isOverdue, isToday, sortTasks } from '../utils'
 
 interface TasksPageProps {
@@ -11,7 +11,7 @@ interface TasksPageProps {
   onToggleDone: (taskId: string) => void
   onEditTask: (task: Task) => void
   onDeleteTask: (task: Task) => void
-  onOpenResource: (resourceId: string) => void
+  onOpenResource: (taskId: string, resource: TaskResource) => void
   onNewTask: () => void
 }
 
@@ -53,7 +53,7 @@ export function TasksPage({
           task.title.toLowerCase().includes(normalizedKeyword) ||
           task.description.toLowerCase().includes(normalizedKeyword) ||
           task.resources.some((resource) =>
-            `${resource.title} ${resource.url}`.toLowerCase().includes(normalizedKeyword),
+            `${resource.title} ${resource.target}`.toLowerCase().includes(normalizedKeyword),
           )
         )
       }),
@@ -81,7 +81,7 @@ export function TasksPage({
             className="search-input"
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
-            placeholder="搜索任务或链接"
+            placeholder="搜索任务或资源"
           />
           <button type="button" className="button primary" onClick={onNewTask}>
             + 新建任务

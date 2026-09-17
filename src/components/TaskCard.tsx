@@ -1,5 +1,4 @@
-import { openExternal } from '../lib/tauri'
-import type { Task } from '../types'
+import type { Task, TaskResource } from '../types'
 import { formatDueLabel, isOverdue, priorityMeta } from '../utils'
 
 interface TaskCardProps {
@@ -11,7 +10,7 @@ interface TaskCardProps {
   onToggleDone: (taskId: string) => void
   onEdit: (task: Task) => void
   onDelete: (task: Task) => void
-  onOpenResource?: (resourceId: string) => void
+  onOpenResource?: (taskId: string, resource: TaskResource) => void
 }
 
 export function TaskCard({
@@ -68,20 +67,15 @@ export function TaskCard({
         {task.resources.length > 0 && (
           <div className="task-resources">
             {task.resources.map((resource) => (
-              <a
+              <button
                 key={resource.id}
+                type="button"
                 className="resource-chip"
-                href={resource.url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => {
-                  event.preventDefault()
-                  onOpenResource?.(resource.id)
-                  void openExternal(resource.url)
-                }}
+                onClick={() => onOpenResource?.(task.id, resource)}
               >
-                ↗ {resource.title}
-              </a>
+                {resource.kind === 'url' ? '↗' : resource.kind === 'file' ? '▤' : '▣'}{' '}
+                {resource.title}
+              </button>
             ))}
           </div>
         )}
