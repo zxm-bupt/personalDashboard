@@ -8,6 +8,7 @@ interface TasksPageProps {
   activeTimerTaskId: string | null
   onStartTimer: (taskId: string) => void
   onStopTimer: () => void
+  onStartTask: (taskId: string) => void
   onToggleDone: (taskId: string) => void
   onEditTask: (task: Task) => void
   onDeleteTask: (task: Task) => void
@@ -28,6 +29,7 @@ export function TasksPage({
   activeTimerTaskId,
   onStartTimer,
   onStopTimer,
+  onStartTask,
   onToggleDone,
   onEditTask,
   onDeleteTask,
@@ -97,7 +99,9 @@ export function TasksPage({
             <TaskCard
               key={task.id}
               task={task}
+              mode="status"
               activeTimerTaskId={activeTimerTaskId}
+              onStartTask={onStartTask}
               onStartTimer={onStartTimer}
               onStopTimer={onStopTimer}
               onToggleDone={onToggleDone}

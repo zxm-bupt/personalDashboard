@@ -135,6 +135,18 @@ export function useWorkbench() {
     })
   }, [])
 
+  const startTask = useCallback((taskId: string) => {
+    const timestamp = nowIso()
+    setState((previous) => ({
+      ...previous,
+      tasks: previous.tasks.map((task) =>
+        task.id === taskId && task.status === 'todo'
+          ? { ...task, status: 'doing', updatedAt: timestamp }
+          : task,
+      ),
+    }))
+  }, [])
+
   const startTimer = useCallback((taskId: string) => {
     const timestamp = nowIso()
     setState((previous) => {
@@ -383,6 +395,7 @@ export function useWorkbench() {
     updateTask,
     deleteTask,
     toggleTaskDone,
+    startTask,
     startTimer,
     stopTimer,
     clockIn,

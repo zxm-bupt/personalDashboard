@@ -4,9 +4,11 @@ import { formatDueLabel, isOverdue, priorityMeta } from '../utils'
 interface TaskCardProps {
   task: Task
   compact?: boolean
+  mode?: 'timer' | 'status'
   activeTimerTaskId: string | null
   onStartTimer: (taskId: string) => void
   onStopTimer: () => void
+  onStartTask?: (taskId: string) => void
   onToggleDone: (taskId: string) => void
   onEdit: (task: Task) => void
   onDelete: (task: Task) => void
@@ -17,9 +19,11 @@ interface TaskCardProps {
 export function TaskCard({
   task,
   compact = false,
+  mode = 'timer',
   activeTimerTaskId,
   onStartTimer,
   onStopTimer,
+  onStartTask,
   onToggleDone,
   onEdit,
   onDelete,
@@ -84,7 +88,16 @@ export function TaskCard({
 
         {!compact && (
           <div className="task-actions">
-            {isActive ? (
+            {mode === 'status' ? (
+              <button
+                type="button"
+                className="button secondary small"
+                onClick={() => onStartTask?.(task.id)}
+                disabled={task.status !== 'todo'}
+              >
+                {task.status === 'doing' ? '进行中' : '开始'}
+              </button>
+            ) : isActive ? (
               <button type="button" className="button primary small" onClick={onStopTimer}>
                 停止计时
               </button>

@@ -16,6 +16,7 @@ function App() {
     updateTask,
     deleteTask,
     toggleTaskDone,
+    startTask,
     startTimer,
     stopTimer,
     clockIn,
@@ -90,6 +91,7 @@ function App() {
             activeTimerTaskId={activeTimer?.taskId ?? null}
             onStartTimer={startTimer}
             onStopTimer={stopTimer}
+            onStartTask={startTask}
             onToggleDone={toggleTaskDone}
             onEditTask={openEditTask}
             onDeleteTask={handleDeleteTask}
