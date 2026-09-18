@@ -105,8 +105,8 @@ pnpm tauri:build
 2. 或者打标签，例如：
 
 ```bash
-git tag v0.3.2
-git push origin v0.3.2
+git tag v0.3.3
+git push origin v0.3.3
 ```
 
 3. GitHub Actions 会构建并上传 macOS ARM64 DMG
