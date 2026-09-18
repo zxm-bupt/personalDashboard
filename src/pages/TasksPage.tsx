@@ -7,6 +7,7 @@ interface TasksPageProps {
   tasks: Task[]
   activeTimerTaskId: string | null
   onStartTask: (taskId: string) => void
+  onClearTasks: () => void
   onToggleDone: (taskId: string) => void
   onEditTask: (task: Task) => void
   onDeleteTask: (task: Task) => void
@@ -26,6 +27,7 @@ export function TasksPage({
   tasks,
   activeTimerTaskId,
   onStartTask,
+  onClearTasks,
   onToggleDone,
   onEditTask,
   onDeleteTask,
@@ -83,6 +85,17 @@ export function TasksPage({
             onChange={(event) => setKeyword(event.target.value)}
             placeholder="搜索任务或资源"
           />
+          <button
+            type="button"
+            className="button ghost danger-text"
+            onClick={() => {
+              if (window.confirm('确定清空所有任务吗？时间记录和打卡记录会保留。')) {
+                onClearTasks()
+              }
+            }}
+          >
+            清空任务
+          </button>
           <button type="button" className="button primary" onClick={onNewTask}>
             + 新建任务
           </button>

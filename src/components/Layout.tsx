@@ -74,12 +74,12 @@ export function Layout({
               type="button"
               className="button ghost danger-text"
               onClick={() => {
-                if (window.confirm('确定清空全部本地数据吗？此操作不可恢复。')) {
+                if (window.confirm('确定清空全部数据吗？任务、时间记录和打卡记录都会被删除，此操作不可恢复。')) {
                   onClear()
                 }
               }}
             >
-              清空
+              清空全部
             </button>
           </div>
         </header>

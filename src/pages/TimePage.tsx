@@ -23,6 +23,10 @@ interface TimePageProps {
     startedAt: string
     endedAt: string
   }) => void
+  onDeleteTimeEntry: (timeEntryId: string) => void
+  onDeleteCheckin: (checkinId: string) => void
+  onClearTimeEntries: () => void
+  onClearCheckins: () => void
 }
 
 export function TimePage({
@@ -35,6 +39,10 @@ export function TimePage({
   onClockOut,
   onStopTimer,
   onCompleteFocus,
+  onDeleteTimeEntry,
+  onDeleteCheckin,
+  onClearTimeEntries,
+  onClearCheckins,
 }: TimePageProps) {
   const [now, setNow] = useState(() => Date.now())
 
@@ -181,6 +189,19 @@ export function TimePage({
             <h2>时间明细</h2>
             <p>最近 30 条记录</p>
           </div>
+          {timeEntries.length > 0 && (
+            <button
+              type="button"
+              className="button ghost small danger-text"
+              onClick={() => {
+                if (window.confirm('确定清空所有时间记录吗？')) {
+                  onClearTimeEntries()
+                }
+              }}
+            >
+              清空时间
+            </button>
+          )}
         </div>
 
         {sortedEntries.length > 0 ? (
@@ -201,8 +222,22 @@ export function TimePage({
                     </small>
                   </div>
                   <div className="time-duration">
-                    {formatDuration(seconds)}
-                    {!entry.endedAt && <span> · 计时中</span>}
+                    <span>
+                      {formatDuration(seconds)}
+                      {!entry.endedAt && ' · 计时中'}
+                    </span>
+                    <button
+                      type="button"
+                      className="icon-button row-delete"
+                      aria-label="删除时间记录"
+                      onClick={() => {
+                        if (window.confirm('确定删除这条时间记录吗？')) {
+                          onDeleteTimeEntry(entry.id)
+                        }
+                      }}
+                    >
+                      ×
+                    </button>
                   </div>
                 </article>
               )
@@ -219,6 +254,19 @@ export function TimePage({
             <h2>打卡历史</h2>
             <p>最近 {checkins.length} 条</p>
           </div>
+          {checkins.length > 0 && (
+            <button
+              type="button"
+              className="button ghost small danger-text"
+              onClick={() => {
+                if (window.confirm('确定清空所有打卡记录吗？')) {
+                  onClearCheckins()
+                }
+              }}
+            >
+              清空打卡
+            </button>
+          )}
         </div>
 
         {checkins.length > 0 ? (
@@ -228,7 +276,21 @@ export function TimePage({
                 <span>
                   {checkin.date} · {formatTime(checkin.clockInAt)}
                 </span>
-                <small>{checkin.clockOutAt ? `下班 ${formatTime(checkin.clockOutAt)}` : '进行中'}</small>
+                <span className="simple-list-actions">
+                  <small>{checkin.clockOutAt ? `下班 ${formatTime(checkin.clockOutAt)}` : '进行中'}</small>
+                  <button
+                    type="button"
+                    className="icon-button row-delete"
+                    aria-label="删除打卡记录"
+                    onClick={() => {
+                      if (window.confirm('确定删除这条打卡记录吗？')) {
+                        onDeleteCheckin(checkin.id)
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
               </li>
             ))}
           </ul>

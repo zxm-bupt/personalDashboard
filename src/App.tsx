@@ -24,6 +24,11 @@ function App() {
     openTaskResource,
     openAllTaskResources,
     exportData,
+    deleteTimeEntry,
+    deleteCheckin,
+    clearTasks,
+    clearTimeEntries,
+    clearCheckins,
     clearAll,
   } = useWorkbench()
 
@@ -86,6 +91,7 @@ function App() {
             tasks={state.tasks}
             activeTimerTaskId={activeTimer?.taskId ?? null}
             onStartTask={startTask}
+            onClearTasks={clearTasks}
             onToggleDone={toggleTaskDone}
             onEditTask={openEditTask}
             onDeleteTask={handleDeleteTask}
@@ -106,6 +112,10 @@ function App() {
             onClockOut={clockOut}
             onStopTimer={stopTimer}
             onCompleteFocus={addFocusSession}
+            onDeleteTimeEntry={deleteTimeEntry}
+            onDeleteCheckin={deleteCheckin}
+            onClearTimeEntries={clearTimeEntries}
+            onClearCheckins={clearCheckins}
           />
         </div>
       </Layout>

@@ -268,6 +268,38 @@ export function useWorkbench() {
     }))
   }, [])
 
+  const deleteTimeEntry = useCallback((timeEntryId: string) => {
+    setState((previous) => ({
+      ...previous,
+      timeEntries: previous.timeEntries.filter((entry) => entry.id !== timeEntryId),
+    }))
+  }, [])
+
+  const deleteCheckin = useCallback((checkinId: string) => {
+    setState((previous) => ({
+      ...previous,
+      checkins: previous.checkins.filter((checkin) => checkin.id !== checkinId),
+    }))
+  }, [])
+
+  const clearTasks = useCallback(() => {
+    setState((previous) => ({
+      ...previous,
+      tasks: [],
+      timeEntries: previous.timeEntries.map((entry) =>
+        entry.taskId ? { ...entry, taskId: null } : entry,
+      ),
+    }))
+  }, [])
+
+  const clearTimeEntries = useCallback(() => {
+    setState((previous) => ({ ...previous, timeEntries: [] }))
+  }, [])
+
+  const clearCheckins = useCallback(() => {
+    setState((previous) => ({ ...previous, checkins: [] }))
+  }, [])
+
   const markResourceOpened = useCallback((resourceId: string) => {
     setState((previous) => ({ ...previous, lastOpenedResourceId: resourceId }))
   }, [])
@@ -402,6 +434,11 @@ export function useWorkbench() {
     clockOut,
     updateResourceTitle,
     addFocusSession,
+    deleteTimeEntry,
+    deleteCheckin,
+    clearTasks,
+    clearTimeEntries,
+    clearCheckins,
     markResourceOpened,
     openTaskResource,
     openAllTaskResources,
