@@ -4,10 +4,10 @@ import { formatDueLabel, isOverdue, priorityMeta } from '../utils'
 interface TaskCardProps {
   task: Task
   compact?: boolean
-  mode?: 'timer' | 'status'
+  mode?: 'timer' | 'status' | 'none'
   activeTimerTaskId: string | null
-  onStartTimer: (taskId: string) => void
-  onStopTimer: () => void
+  onStartTimer?: (taskId: string) => void
+  onStopTimer?: () => void
   onStartTask?: (taskId: string) => void
   onToggleDone: (taskId: string) => void
   onEdit: (task: Task) => void
@@ -88,28 +88,30 @@ export function TaskCard({
 
         {!compact && (
           <div className="task-actions">
-            {mode === 'status' ? (
-              <button
-                type="button"
-                className="button secondary small"
-                onClick={() => onStartTask?.(task.id)}
-                disabled={task.status !== 'todo'}
-              >
-                {task.status === 'doing' ? '进行中' : '开始'}
-              </button>
-            ) : isActive ? (
-              <button type="button" className="button primary small" onClick={onStopTimer}>
-                停止计时
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="button secondary small"
-                onClick={() => onStartTimer(task.id)}
-                disabled={task.status === 'done'}
-              >
-                开始计时
-              </button>
+            {mode !== 'none' && (
+              mode === 'status' ? (
+                <button
+                  type="button"
+                  className="button secondary small"
+                  onClick={() => onStartTask?.(task.id)}
+                  disabled={task.status !== 'todo'}
+                >
+                  {task.status === 'doing' ? '进行中' : '开始'}
+                </button>
+              ) : isActive ? (
+                <button type="button" className="button primary small" onClick={onStopTimer}>
+                  停止计时
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="button secondary small"
+                  onClick={() => onStartTimer?.(task.id)}
+                  disabled={task.status === 'done' || !onStartTimer}
+                >
+                  开始计时
+                </button>
+              )
             )}
             <button
               type="button"

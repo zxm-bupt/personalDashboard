@@ -17,7 +17,6 @@ function App() {
     deleteTask,
     toggleTaskDone,
     startTask,
-    startTimer,
     stopTimer,
     clockIn,
     clockOut,
@@ -73,9 +72,6 @@ function App() {
             tasks={state.tasks}
             timeEntries={state.timeEntries}
             activeCheckin={activeCheckin}
-            activeTimer={activeTimer}
-            onStartTimer={startTimer}
-            onStopTimer={stopTimer}
             onToggleDone={toggleTaskDone}
             onEditTask={openEditTask}
             onDeleteTask={handleDeleteTask}
@@ -89,8 +85,6 @@ function App() {
           <TasksPage
             tasks={state.tasks}
             activeTimerTaskId={activeTimer?.taskId ?? null}
-            onStartTimer={startTimer}
-            onStopTimer={stopTimer}
             onStartTask={startTask}
             onToggleDone={toggleTaskDone}
             onEditTask={openEditTask}

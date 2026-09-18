@@ -15,9 +15,6 @@ interface DashboardPageProps {
   tasks: Task[]
   timeEntries: TimeEntry[]
   activeCheckin: Checkin | null
-  activeTimer: TimeEntry | null
-  onStartTimer: (taskId: string) => void
-  onStopTimer: () => void
   onToggleDone: (taskId: string) => void
   onEditTask: (task: Task) => void
   onDeleteTask: (task: Task) => void
@@ -30,9 +27,6 @@ export function DashboardPage({
   tasks,
   timeEntries,
   activeCheckin,
-  activeTimer,
-  onStartTimer,
-  onStopTimer,
   onToggleDone,
   onEditTask,
   onDeleteTask,
@@ -49,9 +43,6 @@ export function DashboardPage({
   const focusToday = timeEntries
     .filter((entry) => entry.type === 'focus' && toDateKey(entry.startedAt) === toDateKey(new Date()))
     .reduce((total, entry) => total + durationSeconds(entry.startedAt, entry.endedAt), 0)
-  const activeTask = activeTimer
-    ? tasks.find((task) => task.id === activeTimer.taskId) ?? null
-    : null
   const resources = tasks.flatMap((task) =>
     task.resources.map((resource) => ({ task, resource })),
   )
@@ -88,21 +79,6 @@ export function DashboardPage({
           </div>
         </div>
 
-        {activeTimer && activeTask && (
-          <div className="running-banner">
-            <div>
-              <span className="pulse-dot" />
-              <div>
-                <strong>正在专注：{activeTask.title}</strong>
-                <small>开始于 {formatTime(activeTimer.startedAt)}</small>
-              </div>
-            </div>
-            <button type="button" className="button primary small" onClick={onStopTimer}>
-              停止计时
-            </button>
-          </div>
-        )}
-
         <div className="section-header">
           <div>
             <h2>今日关注</h2>
@@ -119,9 +95,8 @@ export function DashboardPage({
               <TaskCard
                 key={task.id}
                 task={task}
-                activeTimerTaskId={activeTimer?.taskId ?? null}
-                onStartTimer={onStartTimer}
-                onStopTimer={onStopTimer}
+                mode="none"
+                activeTimerTaskId={null}
                 onToggleDone={onToggleDone}
                 onEdit={onEditTask}
                 onDelete={onDeleteTask}

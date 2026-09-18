@@ -6,8 +6,6 @@ import { isOverdue, isToday, sortTasks } from '../utils'
 interface TasksPageProps {
   tasks: Task[]
   activeTimerTaskId: string | null
-  onStartTimer: (taskId: string) => void
-  onStopTimer: () => void
   onStartTask: (taskId: string) => void
   onToggleDone: (taskId: string) => void
   onEditTask: (task: Task) => void
@@ -27,8 +25,6 @@ const filters: Array<{ id: TaskFilter; label: string }> = [
 export function TasksPage({
   tasks,
   activeTimerTaskId,
-  onStartTimer,
-  onStopTimer,
   onStartTask,
   onToggleDone,
   onEditTask,
@@ -102,8 +98,6 @@ export function TasksPage({
               mode="status"
               activeTimerTaskId={activeTimerTaskId}
               onStartTask={onStartTask}
-              onStartTimer={onStartTimer}
-              onStopTimer={onStopTimer}
               onToggleDone={onToggleDone}
               onEdit={onEditTask}
               onDelete={onDeleteTask}
