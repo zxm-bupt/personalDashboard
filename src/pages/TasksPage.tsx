@@ -12,6 +12,7 @@ interface TasksPageProps {
   onEditTask: (task: Task) => void
   onDeleteTask: (task: Task) => void
   onOpenResource: (taskId: string, resource: TaskResource) => void
+  onOpenAllResources: (task: Task) => void
   onNewTask: () => void
 }
 
@@ -31,6 +32,7 @@ export function TasksPage({
   onEditTask,
   onDeleteTask,
   onOpenResource,
+  onOpenAllResources,
   onNewTask,
 }: TasksPageProps) {
   const [filter, setFilter] = useState<TaskFilter>('all')
@@ -102,6 +104,7 @@ export function TasksPage({
               onEdit={onEditTask}
               onDelete={onDeleteTask}
               onOpenResource={onOpenResource}
+              onOpenAllResources={onOpenAllResources}
             />
           ))
         ) : (

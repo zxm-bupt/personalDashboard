@@ -27,7 +27,8 @@ export async function pickResource(kind: ResourceKind): Promise<string | null> {
   const platform = await getPlatform()
   const selected = await open({
     multiple: false,
-    directory: kind === 'app' && platform === 'macos',
+    directory: false,
+    defaultPath: kind === 'app' && platform === 'macos' ? '/Applications' : undefined,
     title: kind === 'app' ? '选择应用' : '选择文件',
   })
 

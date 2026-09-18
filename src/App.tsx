@@ -22,6 +22,7 @@ function App() {
     clockOut,
     addFocusSession,
     openTaskResource,
+    openAllTaskResources,
     exportData,
     clearAll,
   } = useWorkbench()
@@ -78,6 +79,7 @@ function App() {
             onEditTask={openEditTask}
             onDeleteTask={handleDeleteTask}
             onOpenResource={openTaskResource}
+            onOpenAllResources={openAllTaskResources}
             onNewTask={openNewTask}
           />
         )}
@@ -92,6 +94,7 @@ function App() {
             onEditTask={openEditTask}
             onDeleteTask={handleDeleteTask}
             onOpenResource={openTaskResource}
+            onOpenAllResources={openAllTaskResources}
             onNewTask={openNewTask}
           />
         )}

@@ -22,6 +22,7 @@ interface DashboardPageProps {
   onEditTask: (task: Task) => void
   onDeleteTask: (task: Task) => void
   onOpenResource: (taskId: string, resource: TaskResource) => void
+  onOpenAllResources: (task: Task) => void
   onNewTask: () => void
 }
 
@@ -36,6 +37,7 @@ export function DashboardPage({
   onEditTask,
   onDeleteTask,
   onOpenResource,
+  onOpenAllResources,
   onNewTask,
 }: DashboardPageProps) {
   const pendingTasks = sortTasks(tasks.filter((task) => task.status !== 'done'))
@@ -124,6 +126,7 @@ export function DashboardPage({
                 onEdit={onEditTask}
                 onDelete={onDeleteTask}
                 onOpenResource={onOpenResource}
+                onOpenAllResources={onOpenAllResources}
               />
             ))
           ) : (

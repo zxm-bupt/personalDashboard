@@ -296,6 +296,69 @@ export function useWorkbench() {
     [markResourceOpened, removeResource],
   )
 
+  const openAllTaskResources = useCallback(
+    async (task: Task) => {
+      const missing: TaskResource[] = []
+
+      for (const resource of task.resources) {
+        markResourceOpened(resource.id)
+
+        if (resource.kind === 'url') {
+          try {
+            await openExternal(resource.target)
+          } catch (error) {
+            console.error('打开网页资源失败', error)
+          }
+          continue
+        }
+
+        if (!isTauri()) {
+          continue
+        }
+
+        try {
+          await invoke('open_resource', {
+            kind: resource.kind,
+            target: resource.target,
+          })
+        } catch (error) {
+          const message = String(error)
+          if (message.includes('RESOURCE_NOT_FOUND')) {
+            missing.push(resource)
+          } else {
+            console.error('打开本地资源失败', message)
+          }
+        }
+      }
+
+      if (missing.length > 0) {
+        const shouldRemove = window.confirm(
+          `以下资源不存在或已被删除，是否取消它们与当前任务的关联？\n\n${missing
+            .map((resource) => `· ${resource.title}`)
+            .join('\n')}`,
+        )
+
+        if (shouldRemove) {
+          setState((previous) => ({
+            ...previous,
+            tasks: previous.tasks.map((item) =>
+              item.id === task.id
+                ? {
+                    ...item,
+                    resources: item.resources.filter(
+                      (resource) => !missing.some((missingResource) => missingResource.id === resource.id),
+                    ),
+                    updatedAt: nowIso(),
+                  }
+                : item,
+            ),
+          }))
+        }
+      }
+    },
+    [markResourceOpened],
+  )
+
   const exportData = useCallback(() => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -328,6 +391,7 @@ export function useWorkbench() {
     addFocusSession,
     markResourceOpened,
     openTaskResource,
+    openAllTaskResources,
     exportData,
     clearAll,
   }

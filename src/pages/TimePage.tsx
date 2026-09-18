@@ -64,6 +64,20 @@ export function TimePage({
       toDateKey(entry.startedAt) === today,
   ).length
 
+  const monthKey = today.slice(0, 7)
+  const monthCheckins = checkins.filter((checkin) => checkin.date.startsWith(monthKey))
+  const monthCheckinSeconds = monthCheckins.reduce(
+    (total, checkin) => total + durationSeconds(checkin.clockInAt, checkin.clockOutAt),
+    0,
+  )
+  const monthCheckinDays = new Set(monthCheckins.map((checkin) => checkin.date)).size
+  const monthAverageSeconds =
+    monthCheckinDays > 0 ? Math.round(monthCheckinSeconds / monthCheckinDays) : 0
+  const monthLabel = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+  }).format(new Date())
+
   return (
     <div className="single-column">
       <section className="stats-grid">
@@ -86,6 +100,30 @@ export function TimePage({
           <span>今日记录</span>
           <strong>{sortedEntries.filter((entry) => toDateKey(entry.startedAt) === today).length} 条</strong>
           <small>打卡和计时记录</small>
+        </div>
+      </section>
+
+      <section className="panel monthly-panel">
+        <div className="section-header compact">
+          <div>
+            <h2>本月打卡统计</h2>
+            <p>{monthLabel} · 共 {monthCheckins.length} 条打卡记录</p>
+          </div>
+        </div>
+
+        <div className="monthly-stats">
+          <div>
+            <span>累计时长</span>
+            <strong>{formatDuration(monthCheckinSeconds)}</strong>
+          </div>
+          <div>
+            <span>打卡天数</span>
+            <strong>{monthCheckinDays} 天</strong>
+          </div>
+          <div>
+            <span>平均每天</span>
+            <strong>{formatDuration(monthAverageSeconds)}</strong>
+          </div>
         </div>
       </section>
 

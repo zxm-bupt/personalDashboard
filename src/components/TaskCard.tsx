@@ -11,6 +11,7 @@ interface TaskCardProps {
   onEdit: (task: Task) => void
   onDelete: (task: Task) => void
   onOpenResource?: (taskId: string, resource: TaskResource) => void
+  onOpenAllResources?: (task: Task) => void
 }
 
 export function TaskCard({
@@ -23,6 +24,7 @@ export function TaskCard({
   onEdit,
   onDelete,
   onOpenResource,
+  onOpenAllResources,
 }: TaskCardProps) {
   const isActive = activeTimerTaskId === task.id
   const overdue = isOverdue(task)
@@ -96,6 +98,14 @@ export function TaskCard({
                 开始计时
               </button>
             )}
+            <button
+              type="button"
+              className="button ghost small"
+              onClick={() => onOpenAllResources?.(task)}
+              disabled={task.resources.length === 0}
+            >
+              打开全部
+            </button>
             <button type="button" className="button ghost small" onClick={() => onEdit(task)}>
               编辑
             </button>
