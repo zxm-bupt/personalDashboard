@@ -49,6 +49,7 @@ let
   fontsConf = pkgs.makeFontsConf {
     fontDirectories = [
       "${pkgs.noto-fonts-cjk-sans}/share/fonts"
+      "${pkgs.noto-fonts-color-emoji}/share/fonts"
       "${pkgs.noto-fonts}/share/fonts"
       "${pkgs.dejavu_fonts}/share/fonts"
     ];

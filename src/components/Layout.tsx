@@ -18,7 +18,7 @@ const navItems: Array<{ id: AppSection; label: string; icon: string }> = [
 
 const sectionTitles: Record<AppSection, { title: string; subtitle: string }> = {
   dashboard: { title: '仪表盘', subtitle: '今天要做什么，一眼看清' },
-  tasks: { title: '任务', subtitle: '任务、DDL、优先级和网页资源' },
+  tasks: { title: '任务', subtitle: '任务、DDL、优先级和关联资源' },
   time: { title: '时间记录', subtitle: '打卡和专注计时' },
 }
 
@@ -35,7 +35,7 @@ export function Layout({
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">W</span>
+          <span className="brand-mark" aria-hidden="true">🐶</span>
           <div>
             <strong>Workbench</strong>
             <span>个人工作台</span>
@@ -56,9 +56,6 @@ export function Layout({
           ))}
         </nav>
 
-        <div className="sidebar-footer">
-          <span>本地优先 · 数据存在浏览器</span>
-        </div>
       </aside>
 
       <main className="main">

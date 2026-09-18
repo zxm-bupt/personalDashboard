@@ -183,7 +183,8 @@ small {
   border-radius: 12px;
   background: linear-gradient(135deg, var(--primary), #8b5cf6);
   color: #fff;
-  font-weight: 800;
+  font-size: 22px;
+  line-height: 1;
 }
 
 .brand div {
@@ -236,14 +237,6 @@ small {
   width: 24px;
   height: 24px;
   font-size: 18px;
-}
-
-.sidebar-footer {
-  margin-top: auto;
-  padding: 12px 8px;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
 }
 
 .main {
@@ -1057,8 +1050,7 @@ small {
     padding: 0;
   }
 
-  .brand div,
-  .sidebar-footer {
+  .brand div {
     display: none;
   }
 
