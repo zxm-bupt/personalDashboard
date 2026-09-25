@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Layout } from './components/Layout'
 import { TaskForm } from './components/TaskForm'
+import { usePomodoro } from './hooks/usePomodoro'
+import { useTray } from './hooks/useTray'
 import { useWorkbench } from './hooks/useWorkbench'
 import { DashboardPage } from './pages/DashboardPage'
 import { TasksPage } from './pages/TasksPage'
@@ -31,6 +33,14 @@ function App() {
     clearCheckins,
     clearAll,
   } = useWorkbench()
+
+  const pomodoro = usePomodoro({
+    hasOtherFocus: Boolean(activeTimer),
+    onCompleteFocus: addFocusSession,
+    onStopOtherFocus: stopTimer,
+  })
+
+  useTray({ activeCheckin, pomodoro })
 
   const [section, setSection] = useState<AppSection>('dashboard')
   const [formOpen, setFormOpen] = useState(false)
@@ -108,10 +118,10 @@ function App() {
             checkins={state.checkins}
             activeCheckin={activeCheckin}
             activeTimer={activeTimer}
+            pomodoro={pomodoro}
             onClockIn={clockIn}
             onClockOut={clockOut}
             onStopTimer={stopTimer}
-            onCompleteFocus={addFocusSession}
             onDeleteTimeEntry={deleteTimeEntry}
             onDeleteCheckin={deleteCheckin}
             onClearTimeEntries={clearTimeEntries}

@@ -1,9 +1,11 @@
+mod tray;
+
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{Manager, State, WindowEvent};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -392,7 +394,7 @@ fn open_path_command(path: &Path) -> std::io::Result<std::process::Child> {
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
@@ -402,15 +404,42 @@ pub fn run() {
             init_db(&connection)?;
             app.manage(Db(Mutex::new(connection)));
 
+            tray::setup(app.handle())?;
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // 关闭主窗口只隐藏界面，保留托盘里的打卡和番茄钟；退出走托盘菜单。
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             load_workbench,
             save_workbench,
             get_os,
             open_resource,
-            open_external
+            open_external,
+            tray::update_tray
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        {
+            // 点击 Dock 图标时重新显示被隐藏的窗口
+            if let tauri::RunEvent::Reopen { .. } = event {
+                tray::show_main_window(app_handle);
+            }
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (app_handle, event);
+        }
+    });
 }

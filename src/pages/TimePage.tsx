@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PomodoroTimer } from '../components/PomodoroTimer'
+import type { PomodoroController } from '../hooks/usePomodoro'
 import type { Checkin, Task, TimeEntry } from '../types'
 import {
   durationSeconds,
@@ -15,14 +16,10 @@ interface TimePageProps {
   checkins: Checkin[]
   activeCheckin: Checkin | null
   activeTimer: TimeEntry | null
+  pomodoro: PomodoroController
   onClockIn: () => void
   onClockOut: () => void
   onStopTimer: () => void
-  onCompleteFocus: (input: {
-    taskId: string | null
-    startedAt: string
-    endedAt: string
-  }) => void
   onDeleteTimeEntry: (timeEntryId: string) => void
   onDeleteCheckin: (checkinId: string) => void
   onClearTimeEntries: () => void
@@ -35,10 +32,10 @@ export function TimePage({
   checkins,
   activeCheckin,
   activeTimer,
+  pomodoro,
   onClockIn,
   onClockOut,
   onStopTimer,
-  onCompleteFocus,
   onDeleteTimeEntry,
   onDeleteCheckin,
   onClearTimeEntries,
@@ -139,8 +136,7 @@ export function TimePage({
         tasks={tasks}
         completedToday={pomodoroToday}
         hasOtherFocus={Boolean(activeTimer)}
-        onCompleteFocus={onCompleteFocus}
-        onStopOtherFocus={onStopTimer}
+        pomodoro={pomodoro}
       />
 
       <section className="panel checkin-panel">

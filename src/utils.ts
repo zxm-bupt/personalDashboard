@@ -94,6 +94,16 @@ export function formatClock(seconds: number): string {
   return `${minutes}:${rest}`
 }
 
+/** 适合托盘标题的紧凑时长，例如 2:05。 */
+export function formatHourClock(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds))
+  const hours = Math.floor(safe / 3600)
+  const minutes = Math.floor((safe % 3600) / 60)
+    .toString()
+    .padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
 export function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds} 秒`
   const minutes = Math.floor(seconds / 60)

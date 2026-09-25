@@ -72,6 +72,29 @@ on both sides if you touch it. `open_external` rejects anything that isn't `http
 
 `isTauri()` (`src/lib/tauri.ts`) sniffs `__TAURI_INTERNALS__` on `window` — use it for any capability gate.
 
+### System tray (desktop only)
+
+The pomodoro state machine lives in `src/hooks/usePomodoro.ts`, lifted out of `PomodoroTimer` so both the
+Time page and the tray drive the *same* timer. `App.tsx` owns it and passes the `PomodoroController` down;
+`PomodoroTimer` is now a pure view over that controller.
+
+`src/hooks/useTray.ts` is the bridge, and it is one-way by design: the frontend formats **all** tray strings
+into a `TraySnapshot` and ships them to `update_tray`; Rust never formats or computes anything. That keeps the
+Chinese labels and duration formatting in one language. A serialized-snapshot comparison suppresses redundant
+IPC, and a 30s interval refreshes the worked-time label only while a check-in is open.
+
+The reverse direction is the `tray://toggle-pomodoro` event, emitted by the Rust menu handler and consumed via
+`listenTrayTogglePomodoro`. The event name is duplicated in `src/lib/tray.ts` and `src-tauri/src/tray.rs` —
+keep them in sync.
+
+`src-tauri/src/tray.rs` deliberately uses the concrete `Wry` runtime rather than a generic `R: Runtime`,
+because the stored `TrayHandles` must be `Send + Sync + 'static` for `app.manage`. `update_tray` must stay a
+**sync** command: sync commands run on the main thread, which is required for muda menu mutation on macOS.
+
+Closing the main window now calls `api.prevent_close()` and hides it so timers keep running; the only real
+quit paths are the tray's 退出 item and (on macOS) `RunEvent::Reopen` to restore. Anything that assumes
+window-close means app-exit is wrong.
+
 ### Navigation quirk
 
 `App.tsx` switches sections with a `useState`, conditionally rendering Dashboard and Tasks. **TimePage is always
