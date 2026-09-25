@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { AppSection } from '../types'
 import { formatFullDate } from '../utils'
+import { BrandMark } from './BrandMark'
 
 interface LayoutProps {
   section: AppSection
@@ -35,7 +36,7 @@ export function Layout({
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">🐶</span>
+          <BrandMark />
           <div>
             <strong>Workbench</strong>
             <span>个人工作台</span>
