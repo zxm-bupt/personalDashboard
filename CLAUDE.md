@@ -83,9 +83,18 @@ into a `TraySnapshot` and ships them to `update_tray`; Rust never formats or com
 Chinese labels and duration formatting in one language. A serialized-snapshot comparison suppresses redundant
 IPC, and a 30s interval refreshes the worked-time label only while a check-in is open.
 
-The reverse direction is the `tray://toggle-pomodoro` event, emitted by the Rust menu handler and consumed via
-`listenTrayTogglePomodoro`. The event name is duplicated in `src/lib/tray.ts` and `src-tauri/src/tray.rs` —
-keep them in sync.
+The reverse direction is the `tray://toggle-pomodoro` and `tray://toggle-checkin` events, emitted by the Rust
+menu handler and consumed via `listenTrayEvent`. The event names are duplicated in `src/lib/tray.ts` and
+`src-tauri/src/tray.rs` — keep them in sync. Menu actions are dispatched through an `actionsRef`, so the
+listeners register once while still calling the latest handlers.
+
+The macOS menu bar icon is drawn procedurally in `src-tauri/src/tray_icon.rs` — a black-plus-alpha template
+image (`icon_as_template(true)`) that the system inverts for light/dark menu bars. It's SDF math rather than a
+committed PNG, which avoids a binary asset and the `image-png` cargo feature. `tray-icon` scales any tray image
+to 18pt tall, so the 36px canvas is exactly Retina 2x. Other platforms keep the full-colour app icon, since
+their tray backgrounds aren't predictable.
+
+Nothing is written next to the icon (no `set_title`) — the check-in duration appears only inside the menu.
 
 `src-tauri/src/tray.rs` deliberately uses the concrete `Wry` runtime rather than a generic `R: Runtime`,
 because the stored `TrayHandles` must be `Send + Sync + 'static` for `app.manage`. `update_tray` must stay a

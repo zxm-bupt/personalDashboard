@@ -40,7 +40,7 @@ function App() {
     onStopOtherFocus: stopTimer,
   })
 
-  useTray({ activeCheckin, pomodoro })
+  useTray({ activeCheckin, pomodoro, onClockIn: clockIn, onClockOut: clockOut })
 
   const [section, setSection] = useState<AppSection>('dashboard')
   const [formOpen, setFormOpen] = useState(false)

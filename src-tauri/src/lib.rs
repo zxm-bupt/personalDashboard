@@ -1,4 +1,6 @@
 mod tray;
+#[cfg(target_os = "macos")]
+mod tray_icon;
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
