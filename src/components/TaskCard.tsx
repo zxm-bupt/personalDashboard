@@ -1,5 +1,12 @@
+import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import type { Task, TaskResource } from '../types'
-import { formatDueLabel, isOverdue, priorityMeta } from '../utils'
+import { formatDueLabel, isOverdue, prefersReducedMotion, priorityMeta } from '../utils'
+
+/** 与 index.css 中 task-drop-out / task-drop-in 共用的动画时长。 */
+const MOTION_DURATION_MS = 340
+
+type CompletionPhase = 'idle' | 'completing' | 'settling'
 
 interface TaskCardProps {
   task: Task
@@ -33,6 +40,54 @@ export function TaskCard({
   const isActive = activeTimerTaskId === task.id
   const overdue = isOverdue(task)
 
+  const [completionPhase, setCompletionPhase] = useState<CompletionPhase>('idle')
+  const timeoutsRef = useRef<number[]>([])
+  const pendingCompletionRef = useRef<(() => void) | null>(null)
+
+  const clearMotionTimers = () => {
+    timeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
+    timeoutsRef.current = []
+  }
+
+  useEffect(
+    () => () => {
+      // 卸载时取消动画节奏，但仍要落库已经触发的完成操作
+      clearMotionTimers()
+      pendingCompletionRef.current?.()
+      pendingCompletionRef.current = null
+    },
+    [],
+  )
+
+  const handleToggleDone = () => {
+    // 滑出过程中忽略重复点击，落位动画则可以直接打断
+    if (completionPhase === 'completing') return
+    clearMotionTimers()
+    setCompletionPhase('idle')
+
+    if (task.status === 'done' || prefersReducedMotion()) {
+      onToggleDone(task.id)
+      return
+    }
+
+    const commit = () => {
+      pendingCompletionRef.current = null
+      onToggleDone(task.id)
+    }
+    pendingCompletionRef.current = commit
+
+    setCompletionPhase('completing')
+    timeoutsRef.current.push(
+      window.setTimeout(() => {
+        commit()
+        setCompletionPhase('settling')
+        timeoutsRef.current.push(
+          window.setTimeout(() => setCompletionPhase('idle'), MOTION_DURATION_MS),
+        )
+      }, MOTION_DURATION_MS),
+    )
+  }
+
   return (
     <article
       className={[
@@ -40,15 +95,18 @@ export function TaskCard({
         `priority-${task.priority}`,
         task.status === 'done' ? 'is-done' : '',
         compact ? 'compact' : '',
+        completionPhase === 'completing' ? 'is-completing' : '',
+        completionPhase === 'settling' ? 'is-settling' : '',
       ]
         .filter(Boolean)
         .join(' ')}
+      style={{ '--task-motion-duration': `${MOTION_DURATION_MS}ms` } as CSSProperties}
     >
       <button
         type="button"
         className={task.status === 'done' ? 'task-check checked' : 'task-check'}
         aria-label={task.status === 'done' ? '标记为未完成' : '标记为完成'}
-        onClick={() => onToggleDone(task.id)}
+        onClick={handleToggleDone}
       >
         {task.status === 'done' ? '✓' : ''}
       </button>

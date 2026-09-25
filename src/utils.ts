@@ -7,6 +7,11 @@ export const priorityMeta: Record<Priority, { label: string; rank: number }> = {
   low: { label: '低', rank: 1 },
 }
 
+export function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 export function createId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
