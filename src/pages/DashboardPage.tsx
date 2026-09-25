@@ -43,7 +43,8 @@ export function DashboardPage({
   const focusToday = timeEntries
     .filter((entry) => entry.type === 'focus' && toDateKey(entry.startedAt) === toDateKey(new Date()))
     .reduce((total, entry) => total + durationSeconds(entry.startedAt, entry.endedAt), 0)
-  const resources = tasks.flatMap((task) =>
+  // 只列出未完成任务的资源，完成任务后它的资源应该从快捷入口里消失
+  const resources = pendingTasks.flatMap((task) =>
     task.resources.map((resource) => ({ task, resource })),
   )
 
@@ -121,7 +122,7 @@ export function DashboardPage({
           <div className="section-header compact">
             <div>
               <h2>任务资源</h2>
-              <p>点击打开网页、文件或应用</p>
+              <p>未完成任务的网页、文件和应用</p>
             </div>
           </div>
 
@@ -145,7 +146,7 @@ export function DashboardPage({
               ))}
             </div>
           ) : (
-            <p className="muted">还没有任务资源，创建任务时添加即可。</p>
+            <p className="muted">没有待办任务的资源，创建任务时添加即可。</p>
           )}
         </section>
 
