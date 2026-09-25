@@ -37,6 +37,12 @@ All mutations are immutable `setState` updates. Two invariants are maintained by
   starts a timer first ends the open one (`endOpenFocus`).
 - **Active check-in** = the single `checkin` with `clockOutAt === null`. `clockIn` closes any open one first.
 
+`activeCheckin` means "a shift is open *right now*", **not** "checked in today" — after clocking out it is
+null again. Any UI that reports the day's check-in state must use `summarizeCheckins()` (`src/utils.ts`)
+instead, which returns a discriminated union over the real three states: `none` / `working` / `finished`.
+It also folds in an open shift that started on a previous day. Treating `activeCheckin` as a boolean for
+"has checked in" is the bug fixed in v0.5.3.
+
 Persistence is a `useEffect` that writes the *whole* state on every change, gated on a `ready` flag so the
 initial empty state never clobbers stored data. Keep that gate intact.
 

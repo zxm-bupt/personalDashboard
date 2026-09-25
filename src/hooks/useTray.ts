@@ -8,11 +8,11 @@ import {
 } from '../lib/tray'
 import type { TraySnapshot } from '../lib/tray'
 import type { Checkin } from '../types'
-import { durationSeconds, formatDuration, formatTime } from '../utils'
+import { formatDuration, formatTime, summarizeCheckins } from '../utils'
 import type { PomodoroController } from './usePomodoro'
 
 interface UseTrayOptions {
-  activeCheckin: Checkin | null
+  checkins: Checkin[]
   pomodoro: PomodoroController
   onClockIn: () => void
   onClockOut: () => void
@@ -21,16 +21,17 @@ interface UseTrayOptions {
 /** 打卡时长只需分钟级精度，30 秒刷新一次即可。 */
 const CHECKIN_REFRESH_MS = 30_000
 
-function buildSnapshot(
-  activeCheckin: Checkin | null,
-  pomodoro: PomodoroController,
-): TraySnapshot {
-  const workedSeconds = activeCheckin
-    ? durationSeconds(activeCheckin.clockInAt, null)
-    : 0
-  const checkinLabel = activeCheckin
-    ? `上班 ${formatTime(activeCheckin.clockInAt)} · 已工作 ${formatDuration(workedSeconds)}`
-    : '今天还没有打卡'
+function buildSnapshot(checkins: Checkin[], pomodoro: PomodoroController): TraySnapshot {
+  const checkin = summarizeCheckins(checkins)
+
+  let checkinLabel: string
+  if (checkin.status === 'working') {
+    checkinLabel = `上班 ${formatTime(checkin.firstClockInAt)} · 已工作 ${formatDuration(checkin.workedSeconds)}`
+  } else if (checkin.status === 'finished') {
+    checkinLabel = `${formatTime(checkin.firstClockInAt)} - ${formatTime(checkin.lastClockOutAt)} · 共 ${formatDuration(checkin.workedSeconds)}`
+  } else {
+    checkinLabel = '今天还没有打卡'
+  }
 
   const minutesLeft = Math.max(1, Math.ceil(pomodoro.remaining / 60))
   const pomodoroLabel = pomodoro.running
@@ -42,7 +43,7 @@ function buildSnapshot(
   return {
     tooltip: `个人工作台 · ${checkinLabel}`,
     checkinLabel,
-    checkinActionLabel: activeCheckin ? '下班打卡' : '上班打卡',
+    checkinActionLabel: checkin.status === 'working' ? '下班打卡' : '上班打卡',
     pomodoroLabel,
     pomodoroActionLabel: `${pomodoro.actionLabel}番茄钟`,
   }
@@ -53,41 +54,42 @@ function buildSnapshot(
  * 浏览器环境下整体降级为空操作。
  */
 export function useTray({
-  activeCheckin,
+  checkins,
   pomodoro,
   onClockIn,
   onClockOut,
 }: UseTrayOptions): void {
   const [checkinTick, setCheckinTick] = useState(0)
   const lastSnapshotRef = useRef('')
+  const isWorking = summarizeCheckins(checkins).status === 'working'
 
   // 托盘监听只注册一次，动作通过 ref 读取最新的处理函数
   const actionsRef = useRef({
     togglePomodoro: pomodoro.toggleTimer,
-    toggleCheckin: () => (activeCheckin ? onClockOut() : onClockIn()),
+    toggleCheckin: () => (isWorking ? onClockOut() : onClockIn()),
   })
 
   useEffect(() => {
     actionsRef.current = {
       togglePomodoro: pomodoro.toggleTimer,
-      toggleCheckin: () => (activeCheckin ? onClockOut() : onClockIn()),
+      toggleCheckin: () => (isWorking ? onClockOut() : onClockIn()),
     }
   })
 
   useEffect(() => {
-    if (!isTauri() || !activeCheckin) return
+    if (!isTauri() || !isWorking) return
 
     const interval = window.setInterval(
       () => setCheckinTick((tick) => tick + 1),
       CHECKIN_REFRESH_MS,
     )
     return () => window.clearInterval(interval)
-  }, [activeCheckin])
+  }, [isWorking])
 
   useEffect(() => {
     if (!isTauri()) return
 
-    const snapshot = buildSnapshot(activeCheckin, pomodoro)
+    const snapshot = buildSnapshot(checkins, pomodoro)
     const serialized = JSON.stringify(snapshot)
     if (serialized === lastSnapshotRef.current) return
     lastSnapshotRef.current = serialized
@@ -95,7 +97,7 @@ export function useTray({
     void updateTray(snapshot).catch((error) => {
       console.error('更新系统托盘失败', error)
     })
-  }, [activeCheckin, checkinTick, pomodoro])
+  }, [checkins, checkinTick, pomodoro])
 
   useEffect(() => {
     if (!isTauri()) return

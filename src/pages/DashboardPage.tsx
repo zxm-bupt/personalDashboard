@@ -7,6 +7,7 @@ import {
   isOverdue,
   isToday,
   sortTasks,
+  summarizeCheckins,
   toDateKey,
 } from '../utils'
 import { TaskCard } from '../components/TaskCard'
@@ -14,7 +15,7 @@ import { TaskCard } from '../components/TaskCard'
 interface DashboardPageProps {
   tasks: Task[]
   timeEntries: TimeEntry[]
-  activeCheckin: Checkin | null
+  checkins: Checkin[]
   onToggleDone: (taskId: string) => void
   onEditTask: (task: Task) => void
   onDeleteTask: (task: Task) => void
@@ -26,7 +27,7 @@ interface DashboardPageProps {
 export function DashboardPage({
   tasks,
   timeEntries,
-  activeCheckin,
+  checkins,
   onToggleDone,
   onEditTask,
   onDeleteTask,
@@ -43,6 +44,7 @@ export function DashboardPage({
   const focusToday = timeEntries
     .filter((entry) => entry.type === 'focus' && toDateKey(entry.startedAt) === toDateKey(new Date()))
     .reduce((total, entry) => total + durationSeconds(entry.startedAt, entry.endedAt), 0)
+  const checkinSummary = summarizeCheckins(checkins)
   // 只列出未完成任务的资源，完成任务后它的资源应该从快捷入口里消失
   const resources = pendingTasks.flatMap((task) =>
     task.resources.map((resource) => ({ task, resource })),
@@ -71,11 +73,19 @@ export function DashboardPage({
           </div>
           <div className="stat-card success">
             <span>打卡状态</span>
-            <strong>{activeCheckin ? '工作中' : '未打卡'}</strong>
+            <strong>
+              {checkinSummary.status === 'working'
+                ? '工作中'
+                : checkinSummary.status === 'finished'
+                  ? '已下班'
+                  : '未打卡'}
+            </strong>
             <small>
-              {activeCheckin
-                ? `上班 ${formatTime(activeCheckin.clockInAt)}`
-                : '去时间记录页打卡'}
+              {checkinSummary.status === 'working'
+                ? `上班 ${formatTime(checkinSummary.firstClockInAt)}`
+                : checkinSummary.status === 'finished'
+                  ? `${formatTime(checkinSummary.firstClockInAt)} - ${formatTime(checkinSummary.lastClockOutAt)}`
+                  : '去时间记录页打卡'}
             </small>
           </div>
         </div>

@@ -13,7 +13,6 @@ function App() {
   const {
     state,
     activeTimer,
-    activeCheckin,
     createTask,
     updateTask,
     deleteTask,
@@ -40,7 +39,7 @@ function App() {
     onStopOtherFocus: stopTimer,
   })
 
-  useTray({ activeCheckin, pomodoro, onClockIn: clockIn, onClockOut: clockOut })
+  useTray({ checkins: state.checkins, pomodoro, onClockIn: clockIn, onClockOut: clockOut })
 
   const [section, setSection] = useState<AppSection>('dashboard')
   const [formOpen, setFormOpen] = useState(false)
@@ -86,7 +85,7 @@ function App() {
           <DashboardPage
             tasks={state.tasks}
             timeEntries={state.timeEntries}
-            activeCheckin={activeCheckin}
+            checkins={state.checkins}
             onToggleDone={toggleTaskDone}
             onEditTask={openEditTask}
             onDeleteTask={handleDeleteTask}
@@ -116,7 +115,6 @@ function App() {
             tasks={state.tasks}
             timeEntries={state.timeEntries}
             checkins={state.checkins}
-            activeCheckin={activeCheckin}
             activeTimer={activeTimer}
             pomodoro={pomodoro}
             onClockIn={clockIn}

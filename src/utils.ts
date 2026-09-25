@@ -1,4 +1,4 @@
-import type { Priority, Task, TimeEntry } from './types'
+import type { Checkin, Priority, Task, TimeEntry } from './types'
 
 export const priorityMeta: Record<Priority, { label: string; rank: number }> = {
   urgent: { label: '紧急', rank: 4 },
@@ -107,6 +107,55 @@ export function durationSeconds(startedAt: string, endedAt?: string | null): num
   const start = new Date(startedAt).getTime()
   const end = endedAt ? new Date(endedAt).getTime() : Date.now()
   return Math.max(0, Math.round((end - start) / 1000))
+}
+
+/**
+ * 当天打卡状态。用可辨识联合表达三种情况，避免把“已下班”和“还没打卡”
+ * 都退化成 activeCheckin === null。
+ */
+export type CheckinSummary =
+  | { status: 'none' }
+  | { status: 'working'; firstClockInAt: string; workedSeconds: number }
+  | {
+      status: 'finished'
+      firstClockInAt: string
+      lastClockOutAt: string
+      workedSeconds: number
+    }
+
+export function summarizeCheckins(
+  checkins: Checkin[],
+  dateKey: string = toDateKey(new Date()),
+): CheckinSummary {
+  // 进行中的打卡可能是前一天开始的，按“当前这一段”一并算进来
+  const relevant = checkins.filter(
+    (checkin) => checkin.date === dateKey || !checkin.clockOutAt,
+  )
+
+  if (relevant.length === 0) return { status: 'none' }
+
+  const workedSeconds = relevant.reduce(
+    (total, checkin) => total + durationSeconds(checkin.clockInAt, checkin.clockOutAt),
+    0,
+  )
+  const firstClockInAt = relevant.reduce(
+    (earliest, checkin) =>
+      new Date(checkin.clockInAt).getTime() < new Date(earliest).getTime()
+        ? checkin.clockInAt
+        : earliest,
+    relevant[0].clockInAt,
+  )
+
+  const open = relevant.find((checkin) => !checkin.clockOutAt)
+  if (open) return { status: 'working', firstClockInAt, workedSeconds }
+
+  // 走到这里说明每一段都有下班时间
+  const lastClockOutAt = relevant.reduce((latest, checkin) => {
+    const clockOutAt = checkin.clockOutAt ?? latest
+    return new Date(clockOutAt).getTime() > new Date(latest).getTime() ? clockOutAt : latest
+  }, relevant[0].clockOutAt as string)
+
+  return { status: 'finished', firstClockInAt, lastClockOutAt, workedSeconds }
 }
 
 export function formatDueLabel(iso: string | null, done: boolean): string {

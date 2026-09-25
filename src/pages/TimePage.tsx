@@ -7,6 +7,7 @@ import {
   formatDuration,
   formatTime,
   sortTimeEntries,
+  summarizeCheckins,
   toDateKey,
 } from '../utils'
 
@@ -14,7 +15,6 @@ interface TimePageProps {
   tasks: Task[]
   timeEntries: TimeEntry[]
   checkins: Checkin[]
-  activeCheckin: Checkin | null
   activeTimer: TimeEntry | null
   pomodoro: PomodoroController
   onClockIn: () => void
@@ -30,7 +30,6 @@ export function TimePage({
   tasks,
   timeEntries,
   checkins,
-  activeCheckin,
   activeTimer,
   pomodoro,
   onClockIn,
@@ -59,6 +58,8 @@ export function TimePage({
     : 0
   const today = toDateKey(new Date())
   const todayCheckins = checkins.filter((checkin) => checkin.date === today)
+  // 每秒重新汇总，进行中的那段才能跟着 now 一起走
+  const checkinSummary = summarizeCheckins(checkins, today)
   const focusToday = timeEntries
     .filter((entry) => entry.type === 'focus' && toDateKey(entry.startedAt) === today)
     .reduce((total, entry) => total + durationSeconds(entry.startedAt, entry.endedAt), 0)
@@ -89,7 +90,13 @@ export function TimePage({
         <div className="stat-card">
           <span>今日打卡</span>
           <strong>{todayCheckins.length} 次</strong>
-          <small>{activeCheckin ? `上班 ${formatTime(activeCheckin.clockInAt)}` : '当前未打卡'}</small>
+          <small>
+            {checkinSummary.status === 'working'
+              ? `上班 ${formatTime(checkinSummary.firstClockInAt)}`
+              : checkinSummary.status === 'finished'
+                ? `已下班 · 共 ${formatDuration(checkinSummary.workedSeconds)}`
+                : '当前未打卡'}
+          </small>
         </div>
         <div className="stat-card accent">
           <span>今日专注</span>
@@ -142,20 +149,28 @@ export function TimePage({
       <section className="panel checkin-panel">
         <div>
           <p className="eyebrow">上下班打卡</p>
-          <h2>{activeCheckin ? '今天正在工作中' : '今天还没有打卡'}</h2>
+          <h2>
+            {checkinSummary.status === 'working'
+              ? '今天正在工作中'
+              : checkinSummary.status === 'finished'
+                ? '今天已下班'
+                : '今天还没有打卡'}
+          </h2>
           <p className="muted">
-            {activeCheckin
-              ? `上班时间 ${formatTime(activeCheckin.clockInAt)}`
-              : '点击打卡后开始记录今天的工作时间。'}
+            {checkinSummary.status === 'working'
+              ? `上班时间 ${formatTime(checkinSummary.firstClockInAt)}`
+              : checkinSummary.status === 'finished'
+                ? `${formatTime(checkinSummary.firstClockInAt)} - ${formatTime(checkinSummary.lastClockOutAt)} · 共 ${formatDuration(checkinSummary.workedSeconds)}`
+                : '点击打卡后开始记录今天的工作时间。'}
           </p>
         </div>
-        {activeCheckin ? (
+        {checkinSummary.status === 'working' ? (
           <button type="button" className="button primary" onClick={onClockOut}>
             下班打卡
           </button>
         ) : (
           <button type="button" className="button primary" onClick={onClockIn}>
-            上班打卡
+            {checkinSummary.status === 'finished' ? '再次上班打卡' : '上班打卡'}
           </button>
         )}
       </section>
