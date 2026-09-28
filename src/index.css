@@ -20,6 +20,10 @@
   --radius: 16px;
   --radius-sm: 10px;
   --task-done-opacity: 0.62;
+  /* 表单控件统一高度，让 input 和 select 在同一行里严格对齐 */
+  --control-height: 42px;
+  --control-height-sm: 40px;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23667085' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
   font-family:
     Inter, 'Noto Sans CJK SC', 'Noto Sans SC', 'Noto Sans', ui-sans-serif, system-ui,
     -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -50,6 +54,7 @@
     --success-soft: rgba(52, 211, 153, 0.12);
     --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     --shadow-strong: 0 16px 40px rgba(0, 0, 0, 0.45);
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%2398a2b3' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
   }
 }
 
@@ -919,13 +924,29 @@ small {
   font-weight: 700;
 }
 
+/*
+ * 原生 select 会按平台自己的 menulist 尺寸渲染，忽略这里的内边距，
+ * 于是和同一行的 input 高度对不齐。统一关掉原生外观并给定固定高度，
+ * 行内每个控件的盒子就完全一致了。
+ */
 .field input,
-.field textarea,
 .field select {
-  padding: 10px 12px;
+  height: var(--control-height);
+  padding: 0 12px;
+}
+
+.field select,
+.resource-row select {
+  appearance: none;
+  padding-right: 32px;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 8px;
 }
 
 .field textarea {
+  padding: 10px 12px;
   resize: vertical;
 }
 
@@ -975,7 +996,13 @@ small {
 
 .resource-row input,
 .resource-row select {
-  padding: 9px 10px;
+  height: var(--control-height-sm);
+  padding: 0 10px;
+}
+
+.resource-row select {
+  padding-right: 28px;
+  background-position: right 10px center;
 }
 
 .resource-picker-slot {

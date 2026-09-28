@@ -131,6 +131,11 @@ and `prefersReducedMotion()` bypasses the delay entirely.
 
 - Styling: one global stylesheet `src/index.css` (~1.3k lines) with plain semantic class names. No Tailwind,
   CSS modules, or component libraries.
+- Form controls size by **height**, not padding: `--control-height` (42px, `.field`) and
+  `--control-height-sm` (40px, `.resource-row`). A native `<select>` renders at its own platform
+  `menulist` size and ignores padding, so it drifts out of line with an `<input>` beside it — every select
+  therefore sets `appearance: none` plus a `--select-chevron` background (which has a dark-mode override).
+  Style a new select with these variables rather than padding, or it won't line up.
 - Date/duration/format helpers and `sortTasks` live in `src/utils.ts` — reuse them rather than inlining
   `Intl.DateTimeFormat`.
 - IDs come from `createId()` (crypto.randomUUID with a fallback); timestamps are ISO strings via `nowIso()`;
