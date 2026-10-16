@@ -158,6 +158,66 @@ export function summarizeCheckins(
   return { status: 'finished', firstClockInAt, lastClockOutAt, workedSeconds }
 }
 
+/** ISO 时间戳转成 <input type="time"> 需要的本地 HH:mm。 */
+export function toTimeInputValue(iso: string): string {
+  const date = new Date(iso)
+  const hours = `${date.getHours()}`.padStart(2, '0')
+  const minutes = `${date.getMinutes()}`.padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
+/** 把 2026-10-16 + 09:30 合成本地时间的 ISO 字符串，格式不合法时返回 null。 */
+export function combineDateAndTime(dateKey: string, time: string): string | null {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey)
+  const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(time)
+  if (!dateMatch || !timeMatch) return null
+
+  const [, year, month, day] = dateMatch
+  const [, hours, minutes] = timeMatch
+  if (Number(hours) > 23 || Number(minutes) > 59) return null
+
+  const composed = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hours),
+    Number(minutes),
+    0,
+    0,
+  )
+  if (Number.isNaN(composed.getTime())) return null
+  return composed.toISOString()
+}
+
+export function shiftIsoByDays(iso: string, days: number): string {
+  return new Date(new Date(iso).getTime() + days * 24 * 60 * 60 * 1000).toISOString()
+}
+
+/**
+ * 找出与给定区间重叠的打卡记录。补卡时用来防止同一段时间被记两次。
+ * 没有下班时间的记录视为延伸到无穷远。
+ */
+export function findCheckinOverlap(
+  checkins: Checkin[],
+  range: { clockInAt: string; clockOutAt: string | null },
+  ignoreId?: string,
+): Checkin | null {
+  const start = new Date(range.clockInAt).getTime()
+  const end = range.clockOutAt ? new Date(range.clockOutAt).getTime() : Number.POSITIVE_INFINITY
+
+  return (
+    checkins.find((checkin) => {
+      if (checkin.id === ignoreId) return false
+      const otherStart = new Date(checkin.clockInAt).getTime()
+      const otherEnd = checkin.clockOutAt
+        ? new Date(checkin.clockOutAt).getTime()
+        : Number.POSITIVE_INFINITY
+      // 首尾相接不算重叠
+      return start < otherEnd && otherStart < end
+    }) ?? null
+  )
+}
+
 export function formatDueLabel(iso: string | null, done: boolean): string {
   if (!iso) return '无 DDL'
   if (done) return `完成于 ${formatDate(iso)}`

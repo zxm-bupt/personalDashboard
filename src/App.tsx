@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { CheckinForm } from './components/CheckinForm'
+import type { CheckinFormValue } from './components/CheckinForm'
 import { Layout } from './components/Layout'
 import { TaskForm } from './components/TaskForm'
 import { usePomodoro } from './hooks/usePomodoro'
@@ -7,7 +9,7 @@ import { useWorkbench } from './hooks/useWorkbench'
 import { DashboardPage } from './pages/DashboardPage'
 import { TasksPage } from './pages/TasksPage'
 import { TimePage } from './pages/TimePage'
-import type { AppSection, Task, TaskInput } from './types'
+import type { AppSection, Checkin, Task, TaskInput } from './types'
 
 function App() {
   const {
@@ -21,6 +23,8 @@ function App() {
     stopTimer,
     clockIn,
     clockOut,
+    addCheckin,
+    updateCheckin,
     addFocusSession,
     openTaskResource,
     openAllTaskResources,
@@ -44,6 +48,32 @@ function App() {
   const [section, setSection] = useState<AppSection>('dashboard')
   const [formOpen, setFormOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [checkinFormOpen, setCheckinFormOpen] = useState(false)
+  const [editingCheckin, setEditingCheckin] = useState<Checkin | null>(null)
+
+  const openNewCheckin = () => {
+    setEditingCheckin(null)
+    setCheckinFormOpen(true)
+  }
+
+  const openEditCheckin = (checkin: Checkin) => {
+    setEditingCheckin(checkin)
+    setCheckinFormOpen(true)
+  }
+
+  const closeCheckinForm = () => {
+    setCheckinFormOpen(false)
+    setEditingCheckin(null)
+  }
+
+  const handleCheckinSubmit = (value: CheckinFormValue) => {
+    if (editingCheckin) {
+      updateCheckin(editingCheckin.id, value)
+    } else {
+      addCheckin(value)
+    }
+    closeCheckinForm()
+  }
 
   const openNewTask = () => {
     setEditingTask(null)
@@ -120,6 +150,8 @@ function App() {
             onClockIn={clockIn}
             onClockOut={clockOut}
             onStopTimer={stopTimer}
+            onNewCheckin={openNewCheckin}
+            onEditCheckin={openEditCheckin}
             onDeleteTimeEntry={deleteTimeEntry}
             onDeleteCheckin={deleteCheckin}
             onClearTimeEntries={clearTimeEntries}
@@ -137,6 +169,15 @@ function App() {
           setEditingTask(null)
         }}
         onSubmit={handleSubmit}
+      />
+
+      <CheckinForm
+        key={checkinFormOpen ? (editingCheckin?.id ?? 'new') : 'closed'}
+        open={checkinFormOpen}
+        checkin={editingCheckin}
+        checkins={state.checkins}
+        onClose={closeCheckinForm}
+        onSubmit={handleCheckinSubmit}
       />
     </>
   )

@@ -20,6 +20,8 @@ interface TimePageProps {
   onClockIn: () => void
   onClockOut: () => void
   onStopTimer: () => void
+  onNewCheckin: () => void
+  onEditCheckin: (checkin: Checkin) => void
   onDeleteTimeEntry: (timeEntryId: string) => void
   onDeleteCheckin: (checkinId: string) => void
   onClearTimeEntries: () => void
@@ -35,6 +37,8 @@ export function TimePage({
   onClockIn,
   onClockOut,
   onStopTimer,
+  onNewCheckin,
+  onEditCheckin,
   onDeleteTimeEntry,
   onDeleteCheckin,
   onClearTimeEntries,
@@ -164,15 +168,20 @@ export function TimePage({
                 : '点击打卡后开始记录今天的工作时间。'}
           </p>
         </div>
-        {checkinSummary.status === 'working' ? (
-          <button type="button" className="button primary" onClick={onClockOut}>
-            下班打卡
+        <div className="checkin-actions">
+          <button type="button" className="button ghost" onClick={onNewCheckin}>
+            补卡
           </button>
-        ) : (
-          <button type="button" className="button primary" onClick={onClockIn}>
-            {checkinSummary.status === 'finished' ? '再次上班打卡' : '上班打卡'}
-          </button>
-        )}
+          {checkinSummary.status === 'working' ? (
+            <button type="button" className="button primary" onClick={onClockOut}>
+              下班打卡
+            </button>
+          ) : (
+            <button type="button" className="button primary" onClick={onClockIn}>
+              {checkinSummary.status === 'finished' ? '再次上班打卡' : '上班打卡'}
+            </button>
+          )}
+        </div>
       </section>
 
       {activeTimer && (
@@ -286,9 +295,17 @@ export function TimePage({
               <li key={checkin.id}>
                 <span>
                   {checkin.date} · {formatTime(checkin.clockInAt)}
+                  {checkin.note && <small className="checkin-tag">{checkin.note}</small>}
                 </span>
                 <span className="simple-list-actions">
                   <small>{checkin.clockOutAt ? `下班 ${formatTime(checkin.clockOutAt)}` : '进行中'}</small>
+                  <button
+                    type="button"
+                    className="button ghost small"
+                    onClick={() => onEditCheckin(checkin)}
+                  >
+                    修改
+                  </button>
                   <button
                     type="button"
                     className="icon-button row-delete"

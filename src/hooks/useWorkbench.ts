@@ -211,6 +211,45 @@ export function useWorkbench() {
     }))
   }, [])
 
+  /** 补卡：插入一条历史打卡记录。date 跟随上班时间所在的那一天。 */
+  const addCheckin = useCallback(
+    (input: { clockInAt: string; clockOutAt: string | null; note?: string }) => {
+      const checkin: Checkin = {
+        id: createId(),
+        date: toDateKey(new Date(input.clockInAt)),
+        clockInAt: input.clockInAt,
+        clockOutAt: input.clockOutAt,
+        note: input.note ?? '补卡',
+      }
+
+      setState((previous) => ({
+        ...previous,
+        checkins: [checkin, ...previous.checkins],
+      }))
+    },
+    [],
+  )
+
+  /** 修改已有打卡记录的上下班时间，用来订正忘记打卡造成的错误区间。 */
+  const updateCheckin = useCallback(
+    (id: string, input: { clockInAt: string; clockOutAt: string | null }) => {
+      setState((previous) => ({
+        ...previous,
+        checkins: previous.checkins.map((checkin) =>
+          checkin.id === id
+            ? {
+                ...checkin,
+                date: toDateKey(new Date(input.clockInAt)),
+                clockInAt: input.clockInAt,
+                clockOutAt: input.clockOutAt,
+              }
+            : checkin,
+        ),
+      }))
+    },
+    [],
+  )
+
   const updateResourceTitle = useCallback((taskId: string, resourceId: string, title: string) => {
     setState((previous) => ({
       ...previous,
@@ -432,6 +471,8 @@ export function useWorkbench() {
     stopTimer,
     clockIn,
     clockOut,
+    addCheckin,
+    updateCheckin,
     updateResourceTitle,
     addFocusSession,
     deleteTimeEntry,

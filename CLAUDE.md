@@ -46,6 +46,21 @@ It also folds in an open shift that started on a previous day. Treating `activeC
 Persistence is a `useEffect` that writes the *whole* state on every change, gated on a `ready` flag so the
 initial empty state never clobbers stored data. Keep that gate intact.
 
+### Retroactive check-in (补卡)
+
+`addCheckin` / `updateCheckin` insert or correct a historical shift. Unlike `clockIn`, `addCheckin` does
+**not** close an open shift — it is writing the past, not starting the present — and it stamps `note: '补卡'`
+so the history row can badge it (`note` already round-trips through SQLite, so no schema change was needed).
+`date` is always re-derived from `clockInAt` via `toDateKey`, since editing the time can move a shift to
+another day.
+
+`CheckinForm` validates before committing: `combineDateAndTime` builds local-time ISO from the date + `HH:mm`
+inputs, a clock-out at or before the clock-in is treated as crossing midnight and pushed a day later
+(`shiftIsoByDays`), and `findCheckinOverlap` rejects a range that collides with an existing shift
+(touching endpoints are allowed; an open shift counts as extending to infinity). The form captures an
+`openedAt` timestamp once instead of calling `Date.now()` during render — oxlint's `react(purity)` rule flags
+that — and re-validates against the real clock on submit.
+
 ### Dual persistence backend
 
 `src/data/workbenchRepository.ts` is the only place that branches on runtime:
