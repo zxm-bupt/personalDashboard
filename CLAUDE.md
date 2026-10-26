@@ -43,6 +43,18 @@ instead, which returns a discriminated union over the real three states: `none` 
 It also folds in an open shift that started on a previous day. Treating `activeCheckin` as a boolean for
 "has checked in" is the bug fixed in v0.5.3.
 
+There are deliberately **two different rules** for an unclosed (`clockOutAt === null`) check-in, and mixing
+them up reintroduces a bug:
+- **Live views** (dashboard, Time page banner, tray) go through `summarizeCheckins()`, which uses
+  `durationSeconds(clockInAt, null)` to show real-time elapsed duration for whatever shift is currently open
+  — this is correct and intentional, including the overnight-shift fold-in above.
+- **Retrospective aggregates** (本月统计, and anything built from historical check-in records) must go
+  through `summarizeCompletedCheckins()` instead, which drops any check-in with no `clockOutAt` entirely
+  (duration 0, not counted toward day totals). Without this, a shift someone forgot to clock out of keeps
+  accumulating against "now" forever and the monthly total grows every day it stays open — that was the bug
+  fixed in v0.6.1. Do not call `durationSeconds(checkin.clockInAt, checkin.clockOutAt)` directly on a list of
+  historical check-ins; `clockOutAt` may be `null` and `durationSeconds` silently falls back to `Date.now()`.
+
 Persistence is a `useEffect` that writes the *whole* state on every change, gated on a `ready` flag so the
 initial empty state never clobbers stored data. Keep that gate intact.
 

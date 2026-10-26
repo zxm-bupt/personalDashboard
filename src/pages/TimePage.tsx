@@ -8,6 +8,7 @@ import {
   formatTime,
   sortTimeEntries,
   summarizeCheckins,
+  summarizeCompletedCheckins,
   toDateKey,
 } from '../utils'
 
@@ -75,12 +76,10 @@ export function TimePage({
   ).length
 
   const monthKey = today.slice(0, 7)
-  const monthCheckins = checkins.filter((checkin) => checkin.date.startsWith(monthKey))
-  const monthCheckinSeconds = monthCheckins.reduce(
-    (total, checkin) => total + durationSeconds(checkin.clockInAt, checkin.clockOutAt),
-    0,
-  )
-  const monthCheckinDays = new Set(monthCheckins.map((checkin) => checkin.date)).size
+  // 本月统计是回顾性汇总：忘记打下班卡的那天不计入，避免用 now 兜底导致数字无限膨胀
+  const monthCheckinsRaw = checkins.filter((checkin) => checkin.date.startsWith(monthKey))
+  const { checkins: monthCheckins, totalSeconds: monthCheckinSeconds, days: monthCheckinDays } =
+    summarizeCompletedCheckins(monthCheckinsRaw)
   const monthAverageSeconds =
     monthCheckinDays > 0 ? Math.round(monthCheckinSeconds / monthCheckinDays) : 0
   const monthLabel = new Intl.DateTimeFormat('zh-CN', {

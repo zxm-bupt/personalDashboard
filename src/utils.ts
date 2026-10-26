@@ -112,6 +112,12 @@ export function durationSeconds(startedAt: string, endedAt?: string | null): num
 /**
  * 当天打卡状态。用可辨识联合表达三种情况，避免把“已下班”和“还没打卡”
  * 都退化成 activeCheckin === null。
+ *
+ * 这里是“正在进行”的实时视角：跨夜还没关闭的那一段会被折进“今天”，
+ * 工作中的时长用 now 实时计算——这部分行为由 v0.5.3 的修复保证，仪表盘 /
+ * 时间页 / 托盘都要看到实时累加的数字，不受“忘记打下班卡的历史记录按 0
+ * 计算”规则的影响。那条规则只用于下面的 summarizeCompletedCheckins，
+ * 给本月统计、打卡历史这类回顾性汇总用。
  */
 export type CheckinSummary =
   | { status: 'none' }
@@ -156,6 +162,30 @@ export function summarizeCheckins(
   }, relevant[0].clockOutAt as string)
 
   return { status: 'finished', firstClockInAt, lastClockOutAt, workedSeconds }
+}
+
+/**
+ * 只保留已经打了下班卡的记录——用于本月统计、打卡历史这类回顾性汇总。
+ * 一条记录如果忘记打下班卡，在这类汇总里按“当天没有发生”处理（计 0），
+ * 而不是用 durationSeconds 的 now 兜底去累加到现在，否则忘记打卡的天数
+ * 越多，统计数字会无限膨胀。正在进行中的当前这一段同样会被排除——它的
+ * 实时时长只在 summarizeCheckins 驱动的仪表盘 / 时间页 / 托盘里展示。
+ */
+export function summarizeCompletedCheckins(checkins: Checkin[]): {
+  checkins: Checkin[]
+  totalSeconds: number
+  days: number
+} {
+  const completed = checkins.filter((checkin): checkin is Checkin & { clockOutAt: string } =>
+    Boolean(checkin.clockOutAt),
+  )
+  const totalSeconds = completed.reduce(
+    (total, checkin) => total + durationSeconds(checkin.clockInAt, checkin.clockOutAt),
+    0,
+  )
+  const days = new Set(completed.map((checkin) => checkin.date)).size
+
+  return { checkins: completed, totalSeconds, days }
 }
 
 /** ISO 时间戳转成 <input type="time"> 需要的本地 HH:mm。 */
