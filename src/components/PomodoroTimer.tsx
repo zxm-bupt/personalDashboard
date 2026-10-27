@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import type { PomodoroController } from '../hooks/usePomodoro'
+import { primeAlerts } from '../lib/alert'
 import type { Task } from '../types'
 import { formatClock } from '../utils'
 
@@ -72,7 +73,15 @@ export function PomodoroTimer({
           )}
 
           <div className="pomodoro-actions">
-            <button type="button" className="button primary" onClick={pomodoro.toggleTimer}>
+            <button
+              type="button"
+              className="button primary"
+              onClick={() => {
+                // 在用户手势里解锁提示音，否则到时提醒会被自动播放策略静音
+                if (!pomodoro.running) primeAlerts()
+                pomodoro.toggleTimer()
+              }}
+            >
               {pomodoro.actionLabel}
             </button>
             <button type="button" className="button ghost" onClick={pomodoro.resetTimer}>

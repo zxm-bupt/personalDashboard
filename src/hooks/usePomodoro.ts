@@ -36,6 +36,14 @@ interface UsePomodoroOptions {
     endedAt: string
   }) => void
   onStopOtherFocus: () => void
+  /** 某个阶段自然走完时调用（手动跳过、重置不会触发），用来弹出到时提醒。 */
+  onPhaseComplete?: (event: PomodoroPhaseCompleteEvent) => void
+}
+
+export interface PomodoroPhaseCompleteEvent {
+  finished: PomodoroPhase
+  next: PomodoroPhase
+  nextMinutes: number
 }
 
 const SETTINGS_KEY = 'personal-workbench:pomodoro-settings'
@@ -73,6 +81,27 @@ export function phaseLabel(phase: PomodoroPhase): string {
   return '长休息'
 }
 
+/** 到时提醒的文案，应用内弹窗和系统通知共用，保证两边说法一致。 */
+export function describePhaseComplete(event: PomodoroPhaseCompleteEvent): {
+  title: string
+  body: string
+  actionLabel: string
+} {
+  if (event.finished === 'focus') {
+    return {
+      title: '专注完成',
+      body: `辛苦了，接下来${phaseLabel(event.next)} ${event.nextMinutes} 分钟。`,
+      actionLabel: '开始休息',
+    }
+  }
+
+  return {
+    title: '休息结束',
+    body: `准备开始下一个番茄，专注 ${event.nextMinutes} 分钟。`,
+    actionLabel: '开始专注',
+  }
+}
+
 /**
  * 番茄钟状态机。提升到 App 层，让系统托盘和时间页共享同一个计时器。
  */
@@ -80,6 +109,7 @@ export function usePomodoro({
   hasOtherFocus,
   onCompleteFocus,
   onStopOtherFocus,
+  onPhaseComplete,
 }: UsePomodoroOptions): PomodoroController {
   const [settings, setSettings] = useState<PomodoroSettings>(loadSettings)
   const [phase, setPhase] = useState<PomodoroPhase>('focus')
@@ -119,9 +149,19 @@ export function usePomodoro({
       const nextPhase: PomodoroPhase = nextCount % 4 === 0 ? 'longBreak' : 'shortBreak'
       setPhase(nextPhase)
       setRemaining(phaseDuration(nextPhase, settings))
+      onPhaseComplete?.({
+        finished: phase,
+        next: nextPhase,
+        nextMinutes: phaseDuration(nextPhase, settings) / 60,
+      })
     } else {
       setPhase('focus')
       setRemaining(phaseDuration('focus', settings))
+      onPhaseComplete?.({
+        finished: phase,
+        next: 'focus',
+        nextMinutes: phaseDuration('focus', settings) / 60,
+      })
     }
 
     setRunning(false)

@@ -137,6 +137,24 @@ Closing the main window now calls `api.prevent_close()` and hides it so timers k
 quit paths are the tray's 退出 item and (on macOS) `RunEvent::Reopen` to restore. Anything that assumes
 window-close means app-exit is wrong.
 
+That only works because the main window sets `"backgroundThrottling": "disabled"` in `tauri.conf.json`.
+WebKit's default policy suspends timers in a hidden view after ~5 minutes, which would freeze the pomodoro
+tick — and with it the completion alert — whenever the window is hidden to the tray. Don't remove it.
+
+### Pomodoro completion alert
+
+`usePomodoro` takes an optional `onPhaseComplete` callback, fired **only** from the tick when a phase runs out
+naturally — never from `skipPhase` / `resetTimer`, since a manual action needs no reminder. The event carries
+`nextMinutes` so `describePhaseComplete()` can build the copy without needing settings; the in-app
+`PomodoroAlert` modal and the system-side alert share that one function so their wording can't drift.
+
+`src/lib/alert.ts` owns the side effects: a two-note chime synthesized with Web Audio (no audio asset), then on
+desktop `invoke('pomodoro_alert')` — which reuses `show_main_window` and calls `request_user_attention` for a
+Dock bounce — or, in the browser, a `Notification` if permission was granted. Autoplay policy keeps an
+`AudioContext` silent unless it was created or resumed inside a user gesture, so `primeAlerts()` is called from
+the 开始 button's click. A pomodoro started from the tray never passes through a webview gesture, so its
+chime may stay muted until one happens; the modal and window raise still work.
+
 ### Navigation quirk
 
 `App.tsx` switches sections with a `useState`, conditionally rendering Dashboard and Tasks. **TimePage is always

@@ -425,7 +425,8 @@ pub fn run() {
             get_os,
             open_resource,
             open_external,
-            tray::update_tray
+            tray::update_tray,
+            tray::pomodoro_alert
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

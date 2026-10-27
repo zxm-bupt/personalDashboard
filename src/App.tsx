@@ -2,8 +2,11 @@ import { useState } from 'react'
 import { CheckinForm } from './components/CheckinForm'
 import type { CheckinFormValue } from './components/CheckinForm'
 import { Layout } from './components/Layout'
+import { PomodoroAlert } from './components/PomodoroAlert'
 import { TaskForm } from './components/TaskForm'
-import { usePomodoro } from './hooks/usePomodoro'
+import { describePhaseComplete, usePomodoro } from './hooks/usePomodoro'
+import type { PomodoroPhaseCompleteEvent } from './hooks/usePomodoro'
+import { raisePomodoroAlert } from './lib/alert'
 import { useTray } from './hooks/useTray'
 import { useWorkbench } from './hooks/useWorkbench'
 import { DashboardPage } from './pages/DashboardPage'
@@ -37,10 +40,21 @@ function App() {
     clearAll,
   } = useWorkbench()
 
+  const [pomodoroAlert, setPomodoroAlert] = useState<PomodoroPhaseCompleteEvent | null>(null)
+
+  const handlePhaseComplete = (event: PomodoroPhaseCompleteEvent) => {
+    setPomodoroAlert(event)
+    const { title, body } = describePhaseComplete(event)
+    void raisePomodoroAlert(title, body).catch((error) => {
+      console.error('番茄钟提醒失败', error)
+    })
+  }
+
   const pomodoro = usePomodoro({
     hasOtherFocus: Boolean(activeTimer),
     onCompleteFocus: addFocusSession,
     onStopOtherFocus: stopTimer,
+    onPhaseComplete: handlePhaseComplete,
   })
 
   useTray({ checkins: state.checkins, pomodoro, onClockIn: clockIn, onClockOut: clockOut })
@@ -179,6 +193,18 @@ function App() {
         onClose={closeCheckinForm}
         onSubmit={handleCheckinSubmit}
       />
+
+      {pomodoroAlert && (
+        <PomodoroAlert
+          {...describePhaseComplete(pomodoroAlert)}
+          onStartNext={() => {
+            setPomodoroAlert(null)
+            // 番茄钟已经切到下一阶段并重置好时长，这里直接开始
+            if (!pomodoro.running) pomodoro.toggleTimer()
+          }}
+          onDismiss={() => setPomodoroAlert(null)}
+        />
+      )}
     </>
   )
 }

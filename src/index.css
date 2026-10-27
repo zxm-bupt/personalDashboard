@@ -1142,6 +1142,81 @@ small {
   width: min(460px, 100%);
 }
 
+/* 番茄钟到时提醒 */
+.pomodoro-alert {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  animation: pomodoro-alert-in 0.22s cubic-bezier(0.16, 0.9, 0.3, 1);
+}
+
+.pomodoro-alert h2 {
+  margin: 0;
+}
+
+.pomodoro-alert p {
+  margin: 0;
+}
+
+.pomodoro-alert .modal-actions {
+  align-self: stretch;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.pomodoro-alert-icon {
+  width: 52px;
+  height: 52px;
+  padding: 12px;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary);
+  transform-origin: 50% 10%;
+  animation: pomodoro-bell-ring 0.9s ease-in-out 2;
+}
+
+@keyframes pomodoro-alert-in {
+  from {
+    transform: translateY(12px) scale(0.97);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pomodoro-bell-ring {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  15% {
+    transform: rotate(14deg);
+  }
+  30% {
+    transform: rotate(-12deg);
+  }
+  45% {
+    transform: rotate(8deg);
+  }
+  60% {
+    transform: rotate(-5deg);
+  }
+  75% {
+    transform: rotate(2deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pomodoro-alert,
+  .pomodoro-alert-icon {
+    animation: none;
+  }
+}
+
 /* Responsive */
 @media (max-width: 1080px) {
   .stats-grid {
