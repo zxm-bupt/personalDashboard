@@ -1,3 +1,4 @@
+mod alert;
 mod tray;
 #[cfg(target_os = "macos")]
 mod tray_icon;
@@ -408,6 +409,9 @@ pub fn run() {
 
             tray::setup(app.handle())?;
 
+            #[cfg(target_os = "macos")]
+            alert::setup(app.handle());
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -426,7 +430,7 @@ pub fn run() {
             open_resource,
             open_external,
             tray::update_tray,
-            tray::pomodoro_alert
+            alert::pomodoro_alert
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

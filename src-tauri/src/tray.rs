@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
-use tauri::{AppHandle, Emitter, Manager, State, UserAttentionType, Wry};
+use tauri::{AppHandle, Emitter, Manager, State, Wry};
 
 /// 托盘菜单发给前端的事件名，和 src/lib/tray.ts 保持一致。
 pub const TOGGLE_POMODORO_EVENT: &str = "tray://toggle-pomodoro";
@@ -123,16 +123,6 @@ pub fn show_main_window(app: &AppHandle<Wry>) {
     let _ = window.show();
     let _ = window.unminimize();
     let _ = window.set_focus();
-}
-
-/// 番茄钟到时：把隐藏在托盘里的主窗口唤回前台，并请求用户关注（macOS 上 Dock 图标会跳动）。
-#[tauri::command]
-pub fn pomodoro_alert(app: AppHandle<Wry>) {
-    show_main_window(&app);
-
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.request_user_attention(Some(UserAttentionType::Critical));
-    }
 }
 
 #[tauri::command]

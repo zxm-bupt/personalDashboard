@@ -148,12 +148,30 @@ naturally — never from `skipPhase` / `resetTimer`, since a manual action needs
 `nextMinutes` so `describePhaseComplete()` can build the copy without needing settings; the in-app
 `PomodoroAlert` modal and the system-side alert share that one function so their wording can't drift.
 
-`src/lib/alert.ts` owns the side effects: a two-note chime synthesized with Web Audio (no audio asset), then on
-desktop `invoke('pomodoro_alert')` — which reuses `show_main_window` and calls `request_user_attention` for a
-Dock bounce — or, in the browser, a `Notification` if permission was granted. Autoplay policy keeps an
-`AudioContext` silent unless it was created or resumed inside a user gesture, so `primeAlerts()` is called from
-the 开始 button's click. A pomodoro started from the tray never passes through a webview gesture, so its
-chime may stay muted until one happens; the modal and window raise still work.
+The alert depends on whether the app is in the foreground. `src-tauri/src/alert.rs` decides that in Rust
+(main window visible, not minimized, and focused — switching to another app drops focus) and
+`pomodoro_alert` returns it as a bool:
+- **Foreground (`true`)** — `src/lib/alert.ts` plays a two-note chime synthesized with Web Audio (no audio
+  asset); the in-app `PomodoroAlert` modal is the reminder.
+- **Background (`false`)** — a macOS system notification via `notify-rust` (default system sound, so the chime
+  is skipped). Clicking its body calls `show_main_window`, bringing a window hidden to the tray back.
+  The window is **not** force-raised any more, since a notification that also steals focus defeats the point.
+
+The modal is set in both cases, so returning to the app lands on the one-click next-phase button.
+
+`notify-rust` (macOS-only dependency, `default-features = false` to keep zbus out) uses the
+`NSUserNotificationCenter` backend: `wait_for_response` blocks until the user clicks or the notification goes
+away, with callbacks delivered on the main run loop — so it runs in `tauri::async_runtime::spawn_blocking`,
+never on the main thread. This mirrors `tauri-plugin-notification`'s own desktop path; the plugin itself
+wasn't used because every release with desktop click support requires Tauri 2.12. `alert::setup` calls
+`set_application` once — the app's bundle id when packaged, `com.apple.Terminal` under `tauri dev`. If
+sending fails, or on non-macOS platforms, it falls back to the v0.7.0 behaviour of raising the window with
+`request_user_attention`.
+
+The browser build follows the same rule: a `Notification` only when the page is hidden or unfocused, and its
+click focuses the tab. Autoplay policy keeps an `AudioContext` silent unless created or resumed inside a user
+gesture, so `primeAlerts()` runs from the 开始 button's click; a pomodoro started from the tray may therefore
+have a muted chime in the foreground case, though the background case uses the system sound regardless.
 
 ### Navigation quirk
 

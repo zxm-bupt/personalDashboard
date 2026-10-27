@@ -51,18 +51,30 @@ function playChime(): void {
 }
 
 /**
- * 到时提醒的系统侧效果：桌面端把隐藏到托盘的窗口唤回前台并请求关注（Dock 跳动），
- * 网页端在已授权时发一条浏览器通知。应用内的弹窗由 PomodoroAlert 负责。
+ * 到时提醒的系统侧效果。应用在前台时只播放提示音，提醒交给应用内的 PomodoroAlert；
+ * 不在前台时发系统通知，点击通知回到应用（桌面端会把隐藏在托盘里的窗口唤回）。
+ * 应用内弹窗无论哪种情况都会保留，回到应用时可以直接一键开始下一阶段。
  */
 export async function raisePomodoroAlert(title: string, body: string): Promise<void> {
-  playChime()
-
   if (isTauri()) {
-    await invoke('pomodoro_alert')
+    // 由 Rust 判断主窗口是否在前台：在前台就只播提示音、让应用内弹窗出场；
+    // 不在前台就改发系统通知，通知自带系统提示音，这里不再重复播放
+    const foreground = await invoke<boolean>('pomodoro_alert', { title, body })
+    if (foreground) playChime()
     return
   }
 
+  playChime()
+
+  // 网页端同样只在页面不在前台时才发系统通知，点击通知回到这个标签页
+  const inForeground = document.visibilityState === 'visible' && document.hasFocus()
+  if (inForeground) return
+
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-    new Notification(title, { body })
+    const notification = new Notification(title, { body })
+    notification.onclick = () => {
+      window.focus()
+      notification.close()
+    }
   }
 }
