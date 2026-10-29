@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CheckinForm } from './components/CheckinForm'
 import type { CheckinFormValue } from './components/CheckinForm'
 import { Layout } from './components/Layout'
 import { PomodoroAlert } from './components/PomodoroAlert'
 import { TaskForm } from './components/TaskForm'
 import { describePhaseComplete, usePomodoro } from './hooks/usePomodoro'
-import type { PomodoroPhaseCompleteEvent } from './hooks/usePomodoro'
-import { raisePomodoroAlert } from './lib/alert'
+import type { PomodoroPhase, PomodoroPhaseCompleteEvent } from './hooks/usePomodoro'
+import { listenPomodoroStartNext, raisePomodoroAlert } from './lib/alert'
 import { useTray } from './hooks/useTray'
 import { useWorkbench } from './hooks/useWorkbench'
 import { DashboardPage } from './pages/DashboardPage'
@@ -44,10 +44,11 @@ function App() {
 
   const handlePhaseComplete = (event: PomodoroPhaseCompleteEvent) => {
     setPomodoroAlert(event)
-    const { title, body } = describePhaseComplete(event)
-    void raisePomodoroAlert(title, body).catch((error) => {
-      console.error('番茄钟提醒失败', error)
-    })
+    void raisePomodoroAlert({ ...describePhaseComplete(event), nextPhase: event.next }).catch(
+      (error) => {
+        console.error('番茄钟提醒失败', error)
+      },
+    )
   }
 
   const pomodoro = usePomodoro({
@@ -56,6 +57,41 @@ function App() {
     onStopOtherFocus: stopTimer,
     onPhaseComplete: handlePhaseComplete,
   })
+
+  /**
+   * 应用内弹窗和系统通知按钮共用的“开始下一阶段”。只有番茄钟确实停在提醒所说的阶段时才开始：
+   * 通知中心里可能还留着过期的通知，点到它的按钮时既不能开错阶段，也不能把正在进行的计时暂停
+   * （toggleTimer 是开关）。
+   */
+  const startNextPhase = (phase: PomodoroPhase) => {
+    setPomodoroAlert((current) => (current?.next === phase ? null : current))
+    if (pomodoro.phase === phase && !pomodoro.running) pomodoro.toggleTimer()
+  }
+
+  // 系统通知按钮的监听只注册一次，通过 ref 调到最新的 startNextPhase
+  const startNextPhaseRef = useRef(startNextPhase)
+  useEffect(() => {
+    startNextPhaseRef.current = startNextPhase
+  })
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | undefined
+
+    void listenPomodoroStartNext((phase) => startNextPhaseRef.current(phase))
+      .then((dispose) => {
+        if (disposed) dispose()
+        else unlisten = dispose
+      })
+      .catch((error) => {
+        console.error('监听番茄钟通知按钮失败', error)
+      })
+
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
 
   useTray({ checkins: state.checkins, pomodoro, onClockIn: clockIn, onClockOut: clockOut })
 
@@ -197,11 +233,7 @@ function App() {
       {pomodoroAlert && (
         <PomodoroAlert
           {...describePhaseComplete(pomodoroAlert)}
-          onStartNext={() => {
-            setPomodoroAlert(null)
-            // 番茄钟已经切到下一阶段并重置好时长，这里直接开始
-            if (!pomodoro.running) pomodoro.toggleTimer()
-          }}
+          onStartNext={() => startNextPhase(pomodoroAlert.next)}
           onDismiss={() => setPomodoroAlert(null)}
         />
       )}

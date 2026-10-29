@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+		番茄钟系统通知的默认样式设为“提醒”（Alerts）：通知会常驻到用户处理，
+		并且一直显示“开始休息 / 开始专注”按钮。“横幅”样式下系统会隐藏这个按钮。
+		只影响首次登记通知权限时的默认值，用户之后仍可在系统设置里改。
+	-->
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
+</dict>
+</plist>

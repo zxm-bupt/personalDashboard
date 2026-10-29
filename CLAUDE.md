@@ -156,8 +156,27 @@ The alert depends on whether the app is in the foreground. `src-tauri/src/alert.
 - **Background (`false`)** — a macOS system notification via `notify-rust` (default system sound, so the chime
   is skipped). Clicking its body calls `show_main_window`, bringing a window hidden to the tray back.
   The window is **not** force-raised any more, since a notification that also steals focus defeats the point.
+  The notification also carries one action button (开始休息 / 开始专注, the same `actionLabel` the modal
+  uses). Clicking it emits `pomodoro://start-next` with `{ phase }` and does **not** raise the window, so the
+  user can start the next phase without leaving the app they're in.
 
 The modal is set in both cases, so returning to the app lands on the one-click next-phase button.
+
+The command takes one `AlertContent` object (`title`, `body`, `actionLabel`, `nextPhase`), the same
+"frontend formats everything" pattern as `TraySnapshot`. Rust treats `nextPhase` as an opaque token and only
+echoes it back in the event. The event name is duplicated in `src/lib/alert.ts` and `src-tauri/src/alert.rs` —
+keep them in sync, since a mismatch fails silently at runtime.
+
+`App.tsx` routes both the modal button and the notification button through one `startNextPhase(phase)`,
+which only starts the timer when `pomodoro.phase === phase && !pomodoro.running`. That guard matters:
+Notification Center can still hold an old notification, and since `toggleTimer` is a toggle, clicking a stale
+button without the check could start the wrong phase or pause a running one. The listener registers once and
+reaches the latest handler through `startNextPhaseRef`.
+
+macOS only shows the action button when the notification style is **Alerts**; Banners hide it.
+`src-tauri/Info.plist` (merged into the bundle by the Tauri CLI) sets `NSUserNotificationAlertStyle` to `alert`
+so new installs default to Alerts. macOS reads that key only when it first registers the app, so an install
+that already registered under Banners keeps Banners until the user changes it in System Settings → 通知.
 
 `notify-rust` (macOS-only dependency, `default-features = false` to keep zbus out) uses the
 `NSUserNotificationCenter` backend: `wait_for_response` blocks until the user clicks or the notification goes
@@ -169,7 +188,8 @@ sending fails, or on non-macOS platforms, it falls back to the v0.7.0 behaviour 
 `request_user_attention`.
 
 The browser build follows the same rule: a `Notification` only when the page is hidden or unfocused, and its
-click focuses the tab. Autoplay policy keeps an `AudioContext` silent unless created or resumed inside a user
+click focuses the tab. It has no action button — the Web Notification API only allows buttons on notifications
+shown through a Service Worker, which the app doesn't have. Autoplay policy keeps an `AudioContext` silent unless created or resumed inside a user
 gesture, so `primeAlerts()` runs from the 开始 button's click; a pomodoro started from the tray may therefore
 have a muted chime in the foreground case, though the background case uses the system sound regardless.
 
