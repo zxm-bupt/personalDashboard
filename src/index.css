@@ -74,23 +74,6 @@ body {
   background: var(--bg);
 }
 
-html,
-body {
-  cursor: url('/cursor-arrow.png') 3 2, default;
-}
-
-a,
-button,
-select,
-summary {
-  cursor: url('/cursor-arrow.png') 3 2, pointer;
-}
-
-input,
-textarea {
-  cursor: url('/cursor-arrow.png') 3 2, text;
-}
-
 button,
 input,
 textarea,
