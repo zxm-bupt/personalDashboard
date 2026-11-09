@@ -234,8 +234,10 @@ and `prefersReducedMotion()` bypasses the delay entirely.
 Tauri build for `aarch64-apple-darwin`. Signing/notarization is skipped unless the `APPLE_*` secrets are set.
 Tagged builds publish the DMG as a GitHub release.
 
-The runner is pinned to `macos-15`. GitHub supports only the two newest macOS images, so this label will be
-retired eventually, as `macos-14` was on 2026-11-02. When a runner image is retired, the job is **cancelled
+The runner is pinned to `macos-26`, the newest GA arm64 image. GitHub supports only the two newest macOS images,
+so this label will be retired eventually, as `macos-14` was on 2026-11-02. macOS 27 has no `macos-27` label:
+from Xcode 27 on, GitHub names images by Xcode version (`xcode-27`), and that image was still marked preview
+when this was written — not suitable for the release pipeline. When a runner image is retired, the job is **cancelled
 within seconds with no runner assigned and no steps run** — it looks like a flaky cancel, not a build error.
 The cause shows up only in the check-run annotation (`The configuration '…' is not supported`), so check that
 before retrying.

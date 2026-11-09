@@ -14,9 +14,10 @@ permissions:
 
 jobs:
   build-macos:
-    # macos-14 was retired on 2026-11-02. Pinned rather than macos-latest so the
-    # image (and its Xcode) can't change under a release without notice.
-    runs-on: macos-15
+    # Newest GA image (macos-14 was retired on 2026-11-02). Pinned rather than
+    # macos-latest, which points here today but moves to the next macOS without
+    # notice, so the image (and its Xcode) can't change under a release.
+    runs-on: macos-26
 
     steps:
       - name: Checkout
