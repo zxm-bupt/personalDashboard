@@ -1,4 +1,6 @@
 mod alert;
+mod sync;
+mod sync_client;
 mod tray;
 #[cfg(target_os = "macos")]
 mod tray_icon;
@@ -18,7 +20,13 @@ struct TaskResource {
     title: String,
     #[serde(alias = "url")]
     target: String,
+    /// 添加这个文件/应用资源的设备；旧数据里没有这个字段
+    #[serde(default)]
+    device_id: Option<String>,
 }
+
+// updatedAt / deletedAt 用于同步：updatedAt 判断哪边更新，deletedAt 不为空表示已删除（墓碑）。
+// 与 src/types.ts 手动保持一致。
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +40,8 @@ struct Task {
     resources: Vec<TaskResource>,
     created_at: String,
     updated_at: String,
+    #[serde(default)]
+    deleted_at: Option<String>,
     completed_at: Option<String>,
 }
 
@@ -45,6 +55,10 @@ struct TimeEntry {
     started_at: String,
     ended_at: Option<String>,
     note: String,
+    #[serde(default)]
+    updated_at: String,
+    #[serde(default)]
+    deleted_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +69,21 @@ struct Checkin {
     clock_in_at: String,
     clock_out_at: Option<String>,
     note: String,
+    #[serde(default)]
+    updated_at: String,
+    #[serde(default)]
+    deleted_at: Option<String>,
+}
+
+/// 只属于本机的同步状态，存在 settings 表里，和业务数据在同一个事务中保存。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SyncMeta {
+    device_id: Option<String>,
+    cursor: Option<i64>,
+    pushed_until: Option<String>,
+    last_sync_at: Option<String>,
+    server_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,9 +93,91 @@ struct WorkbenchState {
     time_entries: Vec<TimeEntry>,
     checkins: Vec<Checkin>,
     last_opened_resource_id: Option<String>,
+    #[serde(default)]
+    sync: SyncMeta,
 }
 
-struct Db(Mutex<Connection>);
+pub(crate) struct Db(pub(crate) Mutex<Connection>);
+
+/// 读一个设置项；不存在时返回 None。
+pub(crate) fn read_setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = ?1",
+        params![key],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+}
+
+/// 写一个设置项；值为 None 时删除这个键。
+///
+/// settings.value 是 NOT NULL，直接插入 NULL 会让 INSERT OR REPLACE 中止，
+/// 进而让整个保存事务回滚——旧版本保存 lastOpenedResourceId 时就是这样丢数据的。
+pub(crate) fn write_setting(
+    conn: &Connection,
+    key: &str,
+    value: Option<&str>,
+) -> rusqlite::Result<()> {
+    match value {
+        Some(value) => conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+            params![key, value],
+        )?,
+        None => conn.execute("DELETE FROM settings WHERE key = ?1", params![key])?,
+    };
+    Ok(())
+}
+
+/// 当前数据库结构版本，记录在 SQLite 的 PRAGMA user_version 里。
+const SCHEMA_VERSION: i64 = 1;
+
+/// v1：为同步增加修改时间和删除标记。新列全部允许为空，旧版本程序打开新库也不会因为
+/// NOT NULL 约束写入失败；旧记录的修改时间按已有字段补齐。
+const MIGRATION_V1: &str = "
+    ALTER TABLE tasks ADD COLUMN deleted_at TEXT;
+    ALTER TABLE time_entries ADD COLUMN updated_at TEXT;
+    ALTER TABLE time_entries ADD COLUMN deleted_at TEXT;
+    ALTER TABLE checkins ADD COLUMN updated_at TEXT;
+    ALTER TABLE checkins ADD COLUMN deleted_at TEXT;
+    UPDATE time_entries SET updated_at = COALESCE(ended_at, started_at) WHERE updated_at IS NULL;
+    UPDATE checkins SET updated_at = COALESCE(clock_out_at, clock_in_at) WHERE updated_at IS NULL;
+";
+
+/// 按 user_version 依次执行迁移。迁移前如果已有数据，先用 VACUUM INTO 备份一份完整副本
+/// （WAL 模式下直接复制文件可能漏掉尚未合并的数据）。迁移在事务里执行，失败会整体回滚。
+fn migrate(conn: &mut Connection, app_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if version >= SCHEMA_VERSION {
+        return Ok(());
+    }
+
+    let has_data: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM tasks)
+             OR EXISTS(SELECT 1 FROM time_entries)
+             OR EXISTS(SELECT 1 FROM checkins)",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_data {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or_default();
+        let backup = app_dir.join(format!("workbench.backup-schema{version}-{stamp}.sqlite3"));
+        conn.execute(
+            "VACUUM INTO ?1",
+            params![backup.to_string_lossy().into_owned()],
+        )?;
+    }
+
+    let transaction = conn.transaction()?;
+    if version < 1 {
+        transaction.execute_batch(MIGRATION_V1)?;
+    }
+    transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    transaction.commit()?;
+    Ok(())
+}
 
 fn init_db(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
@@ -120,7 +231,7 @@ fn load_workbench(db: State<Db>) -> Result<WorkbenchState, String> {
         .prepare(
             "
             SELECT id, title, description, due_at, priority, status,
-                   resources_json, created_at, updated_at, completed_at
+                   resources_json, created_at, updated_at, completed_at, deleted_at
             FROM tasks
             ORDER BY created_at DESC
             ",
@@ -144,6 +255,7 @@ fn load_workbench(db: State<Db>) -> Result<WorkbenchState, String> {
                 created_at: row.get(7)?,
                 updated_at: row.get(8)?,
                 completed_at: row.get(9)?,
+                deleted_at: row.get(10)?,
             })
         })
         .map_err(|error| error.to_string())?;
@@ -155,7 +267,8 @@ fn load_workbench(db: State<Db>) -> Result<WorkbenchState, String> {
     let mut time_statement = conn
         .prepare(
             "
-            SELECT id, task_id, entry_type, started_at, ended_at, note
+            SELECT id, task_id, entry_type, started_at, ended_at, note,
+                   COALESCE(updated_at, ended_at, started_at), deleted_at
             FROM time_entries
             ORDER BY started_at DESC
             ",
@@ -171,6 +284,8 @@ fn load_workbench(db: State<Db>) -> Result<WorkbenchState, String> {
                 started_at: row.get(3)?,
                 ended_at: row.get(4)?,
                 note: row.get(5)?,
+                updated_at: row.get(6)?,
+                deleted_at: row.get(7)?,
             })
         })
         .map_err(|error| error.to_string())?;
@@ -182,7 +297,8 @@ fn load_workbench(db: State<Db>) -> Result<WorkbenchState, String> {
     let mut checkin_statement = conn
         .prepare(
             "
-            SELECT id, date, clock_in_at, clock_out_at, note
+            SELECT id, date, clock_in_at, clock_out_at, note,
+                   COALESCE(updated_at, clock_out_at, clock_in_at), deleted_at
             FROM checkins
             ORDER BY clock_in_at DESC
             ",
@@ -197,6 +313,8 @@ fn load_workbench(db: State<Db>) -> Result<WorkbenchState, String> {
                 clock_in_at: row.get(2)?,
                 clock_out_at: row.get(3)?,
                 note: row.get(4)?,
+                updated_at: row.get(5)?,
+                deleted_at: row.get(6)?,
             })
         })
         .map_err(|error| error.to_string())?;
@@ -205,20 +323,22 @@ fn load_workbench(db: State<Db>) -> Result<WorkbenchState, String> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())?;
 
-    let last_opened_resource_id = conn
-        .query_row(
-            "SELECT value FROM settings WHERE key = 'last_opened_resource_id'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(|error| error.to_string())?;
+    let setting = |key: &str| read_setting(&conn, key).map_err(|error| error.to_string());
+
+    let sync = SyncMeta {
+        device_id: setting("device_id")?,
+        cursor: setting("sync_cursor")?.and_then(|value| value.parse().ok()),
+        pushed_until: setting("sync_pushed_until")?,
+        last_sync_at: setting("sync_last_at")?,
+        server_id: setting("sync_server_id")?,
+    };
 
     Ok(WorkbenchState {
         tasks,
         time_entries,
         checkins,
-        last_opened_resource_id,
+        last_opened_resource_id: setting("last_opened_resource_id")?,
+        sync,
     })
 }
 
@@ -242,6 +362,7 @@ fn save_workbench(db: State<Db>, payload: WorkbenchState) -> Result<(), String> 
         time_entries,
         checkins,
         last_opened_resource_id,
+        sync,
     } = payload;
 
     for task in tasks {
@@ -253,8 +374,8 @@ fn save_workbench(db: State<Db>, payload: WorkbenchState) -> Result<(), String> 
                 "
                 INSERT INTO tasks (
                     id, title, description, due_at, priority, status,
-                    resources_json, created_at, updated_at, completed_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                    resources_json, created_at, updated_at, completed_at, deleted_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                 ",
                 params![
                     task.id,
@@ -267,6 +388,7 @@ fn save_workbench(db: State<Db>, payload: WorkbenchState) -> Result<(), String> 
                     task.created_at,
                     task.updated_at,
                     task.completed_at,
+                    task.deleted_at,
                 ],
             )
             .map_err(|error| error.to_string())?;
@@ -277,8 +399,8 @@ fn save_workbench(db: State<Db>, payload: WorkbenchState) -> Result<(), String> 
             .execute(
                 "
                 INSERT INTO time_entries (
-                    id, task_id, entry_type, started_at, ended_at, note
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                    id, task_id, entry_type, started_at, ended_at, note, updated_at, deleted_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                 ",
                 params![
                     entry.id,
@@ -287,6 +409,8 @@ fn save_workbench(db: State<Db>, payload: WorkbenchState) -> Result<(), String> 
                     entry.started_at,
                     entry.ended_at,
                     entry.note,
+                    entry.updated_at,
+                    entry.deleted_at,
                 ],
             )
             .map_err(|error| error.to_string())?;
@@ -297,8 +421,8 @@ fn save_workbench(db: State<Db>, payload: WorkbenchState) -> Result<(), String> 
             .execute(
                 "
                 INSERT INTO checkins (
-                    id, date, clock_in_at, clock_out_at, note
-                ) VALUES (?1, ?2, ?3, ?4, ?5)
+                    id, date, clock_in_at, clock_out_at, note, updated_at, deleted_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                 ",
                 params![
                     checkin.id,
@@ -306,20 +430,29 @@ fn save_workbench(db: State<Db>, payload: WorkbenchState) -> Result<(), String> 
                     checkin.clock_in_at,
                     checkin.clock_out_at,
                     checkin.note,
+                    checkin.updated_at,
+                    checkin.deleted_at,
                 ],
             )
             .map_err(|error| error.to_string())?;
     }
 
-    transaction
-        .execute(
-            "
-            INSERT OR REPLACE INTO settings (key, value)
-            VALUES ('last_opened_resource_id', ?1)
-            ",
-            params![last_opened_resource_id],
-        )
-        .map_err(|error| error.to_string())?;
+    // 同步游标和业务数据在同一个事务里落盘：不会出现“游标前进了但拉下来的数据没存上”
+    let cursor = sync.cursor.map(|cursor| cursor.to_string());
+    let settings: [(&str, Option<&str>); 6] = [
+        (
+            "last_opened_resource_id",
+            last_opened_resource_id.as_deref(),
+        ),
+        ("device_id", sync.device_id.as_deref()),
+        ("sync_cursor", cursor.as_deref()),
+        ("sync_pushed_until", sync.pushed_until.as_deref()),
+        ("sync_last_at", sync.last_sync_at.as_deref()),
+        ("sync_server_id", sync.server_id.as_deref()),
+    ];
+    for (key, value) in settings {
+        write_setting(&transaction, key, value).map_err(|error| error.to_string())?;
+    }
 
     transaction.commit().map_err(|error| error.to_string())?;
     Ok(())
@@ -403,9 +536,11 @@ pub fn run() {
             let app_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_dir)?;
 
-            let connection = Connection::open(app_dir.join("workbench.sqlite3"))?;
+            let mut connection = Connection::open(app_dir.join("workbench.sqlite3"))?;
             init_db(&connection)?;
+            migrate(&mut connection, &app_dir)?;
             app.manage(Db(Mutex::new(connection)));
+            app.manage(sync::SyncState::default());
 
             tray::setup(app.handle())?;
 
@@ -430,7 +565,12 @@ pub fn run() {
             open_resource,
             open_external,
             tray::update_tray,
-            alert::pomodoro_alert
+            alert::pomodoro_alert,
+            sync::sync_get_config,
+            sync::sync_save_config,
+            sync::sync_clear_config,
+            sync::sync_ping,
+            sync::sync_exchange
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

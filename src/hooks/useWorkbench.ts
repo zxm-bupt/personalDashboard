@@ -1,36 +1,79 @@
 import { invoke } from '@tauri-apps/api/core'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createEmptyState } from '../storage'
 import { loadWorkbench, saveWorkbench } from '../data/workbenchRepository'
+import {
+  claimLegacyResources,
+  closeOpenCheckins,
+  detachTimeEntries,
+  endOpenFocus,
+  isLive,
+  isRemoteResource,
+  liveView,
+  tombstone,
+  updateLive,
+} from '../data/records'
 import { isTauri, openExternal } from '../lib/tauri'
 import type { Checkin, ResourceInput, Task, TaskInput, TaskResource, TimeEntry, WorkbenchState } from '../types'
 import { createId, nowIso, toDateKey } from '../utils'
 
-function endOpenFocus(entries: TimeEntry[], at: string): TimeEntry[] {
-  return entries.map((entry) =>
-    entry.type === 'focus' && !entry.endedAt ? { ...entry, endedAt: at } : entry,
-  )
-}
+const REMOTE_RESOURCE_MESSAGE = '这个资源是在另一台设备上添加的，路径只在那台 Mac 上有效。'
 
-function normalizeResource(resource: ResourceInput): TaskResource {
+/**
+ * 文件/应用资源记下所属设备。编辑任务时如果资源的类型和路径都没变，沿用原来的设备；
+ * 改了路径说明指向的是本机上的新文件，归本机所有。
+ */
+function normalizeResource(
+  resource: ResourceInput,
+  deviceId: string | null,
+  previous: TaskResource | undefined,
+): TaskResource {
+  const target = resource.target.trim()
+  const unchanged = previous && previous.kind === resource.kind && previous.target === target
   return {
     id: resource.id ?? createId(),
     kind: resource.kind,
     title: resource.title.trim(),
-    target: resource.target.trim(),
+    target,
+    deviceId: resource.kind === 'url' ? null : unchanged ? previous.deviceId : deviceId,
   }
 }
 
+function normalizeResources(
+  inputs: ResourceInput[],
+  deviceId: string | null,
+  previous: TaskResource[] = [],
+): TaskResource[] {
+  return inputs
+    .filter((resource) => resource.title.trim() && resource.target.trim())
+    .map((resource) =>
+      normalizeResource(
+        resource,
+        deviceId,
+        previous.find((item) => item.id === resource.id),
+      ),
+    )
+}
+
 export function useWorkbench() {
-  const [state, setState] = useState<WorkbenchState>(() => createEmptyState())
+  // store 含墓碑，是同步和持久化的完整数据；state 是去掉墓碑后给界面用的视图
+  const [store, setStore] = useState<WorkbenchState>(() => createEmptyState())
   const [ready, setReady] = useState(false)
+  const deviceId = store.sync.deviceId
 
   useEffect(() => {
     let cancelled = false
 
     loadWorkbench()
       .then((loaded) => {
-        if (!cancelled) setState(loaded)
+        if (cancelled) return
+        // 首次启动生成本机 id；旧版本添加的文件/应用资源认领为本机资源
+        const ownId = loaded.sync.deviceId ?? createId()
+        setStore({
+          ...loaded,
+          tasks: claimLegacyResources(loaded.tasks, ownId),
+          sync: { ...loaded.sync, deviceId: ownId },
+        })
       })
       .catch((error) => {
         console.error('加载本地数据失败', error)
@@ -47,10 +90,12 @@ export function useWorkbench() {
   useEffect(() => {
     if (!ready) return
 
-    void saveWorkbench(state).catch((error) => {
+    void saveWorkbench(store).catch((error) => {
       console.error('保存本地数据失败', error)
     })
-  }, [state, ready])
+  }, [store, ready])
+
+  const state = useMemo(() => liveView(store), [store])
 
   const activeTimer = useMemo(
     () => state.timeEntries.find((entry) => entry.type === 'focus' && !entry.endedAt) ?? null,
@@ -62,6 +107,11 @@ export function useWorkbench() {
     [state.checkins],
   )
 
+  const deviceIdRef = useRef(deviceId)
+  useEffect(() => {
+    deviceIdRef.current = deviceId
+  })
+
   const createTask = useCallback((input: TaskInput) => {
     const timestamp = nowIso()
     const task: Task = {
@@ -71,62 +121,60 @@ export function useWorkbench() {
       dueAt: input.dueAt,
       priority: input.priority,
       status: 'todo',
-      resources: input.resources
-        .filter((resource) => resource.title.trim() && resource.target.trim())
-        .map(normalizeResource),
+      resources: normalizeResources(input.resources, deviceIdRef.current),
       createdAt: timestamp,
       updatedAt: timestamp,
+      deletedAt: null,
       completedAt: null,
     }
 
-    setState((previous) => ({ ...previous, tasks: [task, ...previous.tasks] }))
+    setStore((previous) => ({ ...previous, tasks: [task, ...previous.tasks] }))
     return task
   }, [])
 
   const updateTask = useCallback((id: string, input: TaskInput) => {
-    setState((previous) => ({
+    const timestamp = nowIso()
+    setStore((previous) => ({
       ...previous,
-      tasks: previous.tasks.map((task) => {
-        if (task.id !== id) return task
-        return {
-          ...task,
-          title: input.title.trim(),
-          description: input.description.trim(),
-          dueAt: input.dueAt,
-          priority: input.priority,
-          resources: input.resources
-            .filter((resource) => resource.title.trim() && resource.target.trim())
-            .map(normalizeResource),
-          updatedAt: nowIso(),
-        }
-      }),
+      tasks: updateLive(previous.tasks, timestamp, (task) =>
+        task.id === id
+          ? {
+              ...task,
+              title: input.title.trim(),
+              description: input.description.trim(),
+              dueAt: input.dueAt,
+              priority: input.priority,
+              resources: normalizeResources(input.resources, deviceIdRef.current, task.resources),
+            }
+          : task,
+      ),
     }))
   }, [])
 
   const deleteTask = useCallback((id: string) => {
-    setState((previous) => ({
+    const timestamp = nowIso()
+    setStore((previous) => ({
       ...previous,
-      tasks: previous.tasks.filter((task) => task.id !== id),
-      timeEntries: previous.timeEntries.map((entry) =>
-        entry.taskId === id ? { ...entry, taskId: null } : entry,
+      tasks: previous.tasks.map((task) =>
+        task.id === id && isLive(task) ? tombstone(task, timestamp) : task,
       ),
+      timeEntries: detachTimeEntries(previous.timeEntries, new Set([id]), timestamp),
     }))
   }, [])
 
   const toggleTaskDone = useCallback((id: string) => {
     const timestamp = nowIso()
-    setState((previous) => {
+    setStore((previous) => {
       const task = previous.tasks.find((item) => item.id === id)
       const isDone = task?.status === 'done'
       return {
         ...previous,
-        tasks: previous.tasks.map((item) =>
+        tasks: updateLive(previous.tasks, timestamp, (item) =>
           item.id === id
             ? {
                 ...item,
                 status: isDone ? 'todo' : 'done',
                 completedAt: isDone ? null : timestamp,
-                updatedAt: timestamp,
               }
             : item,
         ),
@@ -137,20 +185,17 @@ export function useWorkbench() {
 
   const startTask = useCallback((taskId: string) => {
     const timestamp = nowIso()
-    setState((previous) => ({
+    setStore((previous) => ({
       ...previous,
-      tasks: previous.tasks.map((task) =>
-        task.id === taskId && task.status === 'todo'
-          ? { ...task, status: 'doing', updatedAt: timestamp }
-          : task,
+      tasks: updateLive(previous.tasks, timestamp, (task) =>
+        task.id === taskId && task.status === 'todo' ? { ...task, status: 'doing' } : task,
       ),
     }))
   }, [])
 
   const startTimer = useCallback((taskId: string) => {
     const timestamp = nowIso()
-    setState((previous) => {
-      const nextEntries = endOpenFocus(previous.timeEntries, timestamp)
+    setStore((previous) => {
       const entry: TimeEntry = {
         id: createId(),
         taskId,
@@ -158,15 +203,15 @@ export function useWorkbench() {
         startedAt: timestamp,
         endedAt: null,
         note: '',
+        updatedAt: timestamp,
+        deletedAt: null,
       }
 
       return {
         ...previous,
-        timeEntries: [entry, ...nextEntries],
-        tasks: previous.tasks.map((task) =>
-          task.id === taskId && task.status === 'todo'
-            ? { ...task, status: 'doing', updatedAt: timestamp }
-            : task,
+        timeEntries: [entry, ...endOpenFocus(previous.timeEntries, timestamp)],
+        tasks: updateLive(previous.tasks, timestamp, (task) =>
+          task.id === taskId && task.status === 'todo' ? { ...task, status: 'doing' } : task,
         ),
       }
     })
@@ -174,13 +219,9 @@ export function useWorkbench() {
 
   const stopTimer = useCallback(() => {
     const timestamp = nowIso()
-    setState((previous) => ({
+    setStore((previous) => ({
       ...previous,
-      timeEntries: previous.timeEntries.map((entry) =>
-        entry.type === 'focus' && !entry.endedAt
-          ? { ...entry, endedAt: timestamp }
-          : entry,
-      ),
+      timeEntries: endOpenFocus(previous.timeEntries, timestamp),
     }))
   }, [])
 
@@ -192,37 +233,38 @@ export function useWorkbench() {
       clockInAt: timestamp,
       clockOutAt: null,
       note: '',
+      updatedAt: timestamp,
+      deletedAt: null,
     }
-    setState((previous) => ({
+    setStore((previous) => ({
       ...previous,
-      checkins: [checkin, ...previous.checkins.map((item) =>
-        !item.clockOutAt ? { ...item, clockOutAt: timestamp } : item,
-      )],
+      checkins: [checkin, ...closeOpenCheckins(previous.checkins, timestamp)],
     }))
   }, [])
 
   const clockOut = useCallback(() => {
     const timestamp = nowIso()
-    setState((previous) => ({
+    setStore((previous) => ({
       ...previous,
-      checkins: previous.checkins.map((item) =>
-        !item.clockOutAt ? { ...item, clockOutAt: timestamp } : item,
-      ),
+      checkins: closeOpenCheckins(previous.checkins, timestamp),
     }))
   }, [])
 
   /** 补卡：插入一条历史打卡记录。date 跟随上班时间所在的那一天。 */
   const addCheckin = useCallback(
     (input: { clockInAt: string; clockOutAt: string | null; note?: string }) => {
+      const timestamp = nowIso()
       const checkin: Checkin = {
         id: createId(),
         date: toDateKey(new Date(input.clockInAt)),
         clockInAt: input.clockInAt,
         clockOutAt: input.clockOutAt,
         note: input.note ?? '补卡',
+        updatedAt: timestamp,
+        deletedAt: null,
       }
 
-      setState((previous) => ({
+      setStore((previous) => ({
         ...previous,
         checkins: [checkin, ...previous.checkins],
       }))
@@ -233,9 +275,10 @@ export function useWorkbench() {
   /** 修改已有打卡记录的上下班时间，用来订正忘记打卡造成的错误区间。 */
   const updateCheckin = useCallback(
     (id: string, input: { clockInAt: string; clockOutAt: string | null }) => {
-      setState((previous) => ({
+      const timestamp = nowIso()
+      setStore((previous) => ({
         ...previous,
-        checkins: previous.checkins.map((checkin) =>
+        checkins: updateLive(previous.checkins, timestamp, (checkin) =>
           checkin.id === id
             ? {
                 ...checkin,
@@ -251,9 +294,10 @@ export function useWorkbench() {
   )
 
   const updateResourceTitle = useCallback((taskId: string, resourceId: string, title: string) => {
-    setState((previous) => ({
+    const timestamp = nowIso()
+    setStore((previous) => ({
       ...previous,
-      tasks: previous.tasks.map((task) =>
+      tasks: updateLive(previous.tasks, timestamp, (task) =>
         task.id === taskId
           ? {
               ...task,
@@ -268,6 +312,7 @@ export function useWorkbench() {
 
   const addFocusSession = useCallback(
     (input: { taskId: string | null; startedAt: string; endedAt: string; note?: string }) => {
+      const timestamp = nowIso()
       const entry: TimeEntry = {
         id: createId(),
         taskId: input.taskId,
@@ -275,15 +320,17 @@ export function useWorkbench() {
         startedAt: input.startedAt,
         endedAt: input.endedAt,
         note: input.note ?? '番茄钟',
+        updatedAt: timestamp,
+        deletedAt: null,
       }
 
-      setState((previous) => ({
+      setStore((previous) => ({
         ...previous,
         timeEntries: [entry, ...previous.timeEntries],
         tasks: input.taskId
-          ? previous.tasks.map((task) =>
+          ? updateLive(previous.tasks, timestamp, (task) =>
               task.id === input.taskId && task.status === 'todo'
-                ? { ...task, status: 'doing', updatedAt: input.endedAt }
+                ? { ...task, status: 'doing' }
                 : task,
             )
           : previous.tasks,
@@ -292,59 +339,83 @@ export function useWorkbench() {
     [],
   )
 
-  const removeResource = useCallback((taskId: string, resourceId: string) => {
-    setState((previous) => ({
+  const removeResources = useCallback((taskId: string, resourceIds: Set<string>) => {
+    const timestamp = nowIso()
+    setStore((previous) => ({
       ...previous,
-      tasks: previous.tasks.map((task) =>
+      tasks: updateLive(previous.tasks, timestamp, (task) =>
         task.id === taskId
-          ? {
-              ...task,
-              resources: task.resources.filter((resource) => resource.id !== resourceId),
-              updatedAt: nowIso(),
-            }
+          ? { ...task, resources: task.resources.filter((resource) => !resourceIds.has(resource.id)) }
           : task,
       ),
     }))
   }, [])
 
   const deleteTimeEntry = useCallback((timeEntryId: string) => {
-    setState((previous) => ({
+    const timestamp = nowIso()
+    setStore((previous) => ({
       ...previous,
-      timeEntries: previous.timeEntries.filter((entry) => entry.id !== timeEntryId),
-    }))
-  }, [])
-
-  const deleteCheckin = useCallback((checkinId: string) => {
-    setState((previous) => ({
-      ...previous,
-      checkins: previous.checkins.filter((checkin) => checkin.id !== checkinId),
-    }))
-  }, [])
-
-  const clearTasks = useCallback(() => {
-    setState((previous) => ({
-      ...previous,
-      tasks: [],
       timeEntries: previous.timeEntries.map((entry) =>
-        entry.taskId ? { ...entry, taskId: null } : entry,
+        entry.id === timeEntryId && isLive(entry) ? tombstone(entry, timestamp) : entry,
       ),
     }))
   }, [])
 
+  const deleteCheckin = useCallback((checkinId: string) => {
+    const timestamp = nowIso()
+    setStore((previous) => ({
+      ...previous,
+      checkins: previous.checkins.map((checkin) =>
+        checkin.id === checkinId && isLive(checkin) ? tombstone(checkin, timestamp) : checkin,
+      ),
+    }))
+  }, [])
+
+  // 清空也是打墓碑：直接清掉的话，另一台设备同步回来时这些记录又会出现
+  const clearTasks = useCallback(() => {
+    const timestamp = nowIso()
+    setStore((previous) => {
+      const cleared = new Set(previous.tasks.filter(isLive).map((task) => task.id))
+      return {
+        ...previous,
+        tasks: previous.tasks.map((task) => (isLive(task) ? tombstone(task, timestamp) : task)),
+        timeEntries: detachTimeEntries(previous.timeEntries, cleared, timestamp),
+      }
+    })
+  }, [])
+
   const clearTimeEntries = useCallback(() => {
-    setState((previous) => ({ ...previous, timeEntries: [] }))
+    const timestamp = nowIso()
+    setStore((previous) => ({
+      ...previous,
+      timeEntries: previous.timeEntries.map((entry) =>
+        isLive(entry) ? tombstone(entry, timestamp) : entry,
+      ),
+    }))
   }, [])
 
   const clearCheckins = useCallback(() => {
-    setState((previous) => ({ ...previous, checkins: [] }))
+    const timestamp = nowIso()
+    setStore((previous) => ({
+      ...previous,
+      checkins: previous.checkins.map((checkin) =>
+        isLive(checkin) ? tombstone(checkin, timestamp) : checkin,
+      ),
+    }))
   }, [])
 
+  // 只属于本机，不改 updatedAt，也不参与同步
   const markResourceOpened = useCallback((resourceId: string) => {
-    setState((previous) => ({ ...previous, lastOpenedResourceId: resourceId }))
+    setStore((previous) => ({ ...previous, lastOpenedResourceId: resourceId }))
   }, [])
 
   const openTaskResource = useCallback(
     async (taskId: string, resource: TaskResource) => {
+      if (isRemoteResource(resource, deviceIdRef.current)) {
+        window.alert(REMOTE_RESOURCE_MESSAGE)
+        return
+      }
+
       markResourceOpened(resource.id)
 
       if (resource.kind === 'url') {
@@ -369,21 +440,28 @@ export function useWorkbench() {
           const shouldRemove = window.confirm(
             `资源“${resource.title}”不存在或已被删除，是否取消它与当前任务的关联？`,
           )
-          if (shouldRemove) removeResource(taskId, resource.id)
+          if (shouldRemove) removeResources(taskId, new Set([resource.id]))
           return
         }
 
         window.alert(`打开资源失败：${message}`)
       }
     },
-    [markResourceOpened, removeResource],
+    [markResourceOpened, removeResources],
   )
 
   const openAllTaskResources = useCallback(
     async (task: Task) => {
       const missing: TaskResource[] = []
+      let skippedRemote = 0
 
       for (const resource of task.resources) {
+        // 其他设备上的文件路径在本机不存在，跳过，也不能提示取消关联
+        if (isRemoteResource(resource, deviceIdRef.current)) {
+          skippedRemote += 1
+          continue
+        }
+
         markResourceOpened(resource.id)
 
         if (resource.kind === 'url') {
@@ -422,28 +500,20 @@ export function useWorkbench() {
         )
 
         if (shouldRemove) {
-          setState((previous) => ({
-            ...previous,
-            tasks: previous.tasks.map((item) =>
-              item.id === task.id
-                ? {
-                    ...item,
-                    resources: item.resources.filter(
-                      (resource) => !missing.some((missingResource) => missingResource.id === resource.id),
-                    ),
-                    updatedAt: nowIso(),
-                  }
-                : item,
-            ),
-          }))
+          removeResources(task.id, new Set(missing.map((resource) => resource.id)))
         }
+      } else if (skippedRemote > 0) {
+        window.alert(`有 ${skippedRemote} 个资源是在其他设备上添加的，已跳过。`)
       }
     },
-    [markResourceOpened],
+    [markResourceOpened, removeResources],
   )
 
   const exportData = useCallback(() => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
+    // 导出给人看的备份：不含墓碑和本机同步状态
+    const { sync: _sync, ...exported } = state
+    void _sync
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
@@ -455,11 +525,31 @@ export function useWorkbench() {
   }, [state])
 
   const clearAll = useCallback(() => {
-    setState(createEmptyState())
+    const timestamp = nowIso()
+    setStore((previous) => ({
+      ...previous,
+      tasks: previous.tasks.map((task) => (isLive(task) ? tombstone(task, timestamp) : task)),
+      timeEntries: previous.timeEntries.map((entry) =>
+        isLive(entry) ? tombstone(entry, timestamp) : entry,
+      ),
+      checkins: previous.checkins.map((checkin) =>
+        isLive(checkin) ? tombstone(checkin, timestamp) : checkin,
+      ),
+      lastOpenedResourceId: null,
+    }))
+  }, [])
+
+  /** 给同步引擎用：在最新的完整数据（含墓碑）上应用一次更新。 */
+  const updateStore = useCallback((updater: (previous: WorkbenchState) => WorkbenchState) => {
+    setStore(updater)
   }, [])
 
   return {
     state,
+    store,
+    ready,
+    deviceId,
+    updateStore,
     activeTimer,
     activeCheckin,
     createTask,

@@ -224,6 +224,32 @@ export function shiftIsoByDays(iso: string, days: number): string {
 }
 
 /**
+ * 找出所有和其他记录时间重叠的打卡。两台 Mac 第一次同步时，如果以前在两边都打过同一天的卡，
+ * 合并后就会出现重叠，本月统计会把重叠部分算两次；这里只负责标出来，让用户自己决定保留哪条。
+ * 首尾相接不算重叠，没有下班时间的记录视为延伸到无穷远（和 findCheckinOverlap 一致）。
+ */
+export function findOverlappingCheckinIds(checkins: Checkin[]): Set<string> {
+  const ranges = checkins
+    .map((checkin) => ({
+      id: checkin.id,
+      start: Date.parse(checkin.clockInAt),
+      end: checkin.clockOutAt ? Date.parse(checkin.clockOutAt) : Number.POSITIVE_INFINITY,
+    }))
+    .sort((a, b) => a.start - b.start)
+
+  const overlapping = new Set<string>()
+  let furthest: { id: string; end: number } | null = null
+  for (const range of ranges) {
+    if (furthest && range.start < furthest.end) {
+      overlapping.add(range.id)
+      overlapping.add(furthest.id)
+    }
+    if (!furthest || range.end > furthest.end) furthest = range
+  }
+  return overlapping
+}
+
+/**
  * 找出与给定区间重叠的打卡记录。补卡时用来防止同一段时间被记两次。
  * 没有下班时间的记录视为延伸到无穷远。
  */

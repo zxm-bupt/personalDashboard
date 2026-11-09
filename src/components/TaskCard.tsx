@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { isRemoteResource } from '../data/records'
 import type { Task, TaskResource } from '../types'
 import { formatDueLabel, isOverdue, prefersReducedMotion, priorityMeta } from '../utils'
 
@@ -21,6 +22,8 @@ interface TaskCardProps {
   onDelete: (task: Task) => void
   onOpenResource?: (taskId: string, resource: TaskResource) => void
   onOpenAllResources?: (task: Task) => void
+  /** 本机 id，用来标出在其他设备上添加的文件/应用资源。 */
+  localDeviceId?: string | null
 }
 
 export function TaskCard({
@@ -36,6 +39,7 @@ export function TaskCard({
   onDelete,
   onOpenResource,
   onOpenAllResources,
+  localDeviceId = null,
 }: TaskCardProps) {
   const isActive = activeTimerTaskId === task.id
   const overdue = isOverdue(task)
@@ -134,7 +138,14 @@ export function TaskCard({
               <button
                 key={resource.id}
                 type="button"
-                className="resource-chip"
+                className={
+                  isRemoteResource(resource, localDeviceId) ? 'resource-chip is-remote' : 'resource-chip'
+                }
+                title={
+                  isRemoteResource(resource, localDeviceId)
+                    ? '在其他设备上添加，这台 Mac 上打不开'
+                    : undefined
+                }
                 onClick={() => onOpenResource?.(task.id, resource)}
               >
                 {resource.kind === 'url' ? '↗' : resource.kind === 'file' ? '▤' : '▣'}{' '}

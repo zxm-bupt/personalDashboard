@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "typecheck": "tsc -b",
+    "test": "node --test \"server/test/**/*.test.ts\" \"tests/**/*.test.ts\"",
     "dev:host": "vite --host 0.0.0.0",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

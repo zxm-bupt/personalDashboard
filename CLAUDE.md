@@ -18,9 +18,18 @@ pnpm typecheck      # tsc -b
 pnpm build          # tsc -b && vite build
 pnpm tauri:dev      # desktop dev (spawns `pnpm dev` itself via beforeDevCommand)
 pnpm tauri:build    # desktop bundle
+pnpm test           # node --test over server/test and tests/ (sync server + sync engine)
+node --test server/test/store.test.ts   # a single test file
 ```
 
-There is no test framework. Verification = `pnpm lint && pnpm typecheck && pnpm build`, plus running the app.
+Verification = `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, plus running the app. There is no
+test framework dependency: tests use Node's built-in `node:test` and run TypeScript directly through Node 24's
+type stripping. That only works for modules that use `import type` for types and import values with an
+explicit `.ts` extension (`allowImportingTsExtensions`) — keep `server/src/*`, `src/sync/*` and
+`src/data/records.ts` that way, or they stop being testable. UI components are not covered by tests.
+
+`tsc -b` has three projects: `tsconfig.app.json` (the app), `tsconfig.node.json` (vite config) and
+`tsconfig.server.json` (`server/`, `tests/`, with `strict` and Node types).
 
 On NixOS/WSL, `nix-shell` provides Node, Rust, and the GTK/WebKit native deps Tauri needs (`shell.nix`).
 
@@ -29,8 +38,16 @@ On NixOS/WSL, `nix-shell` provides Node, Rust, and the GTK/WebKit native deps Ta
 ### One state object, one hook
 
 `src/hooks/useWorkbench.ts` owns the entire `WorkbenchState` (`tasks`, `timeEntries`, `checkins`,
-`lastOpenedResourceId`) and exposes every mutation as a callback. `App.tsx` destructures it and passes
+`lastOpenedResourceId`, `sync`) and exposes every mutation as a callback. `App.tsx` destructures it and passes
 callbacks down as props — there is no context, no reducer, no router, no state library.
+
+The hook holds two views of the data. **`store`** is everything, including tombstones, and is what gets
+persisted and synced. **`state`** is `liveView(store)` — tombstones filtered out — and is what every page sees.
+Deletes and clears never remove records: they set `deletedAt` (`tombstone()` in `src/data/records.ts`),
+otherwise another device's copy would bring them back on the next sync. Every mutation must also stamp
+`updatedAt` with the current time; use `updateLive()`, which only touches live records and stamps changed ones.
+A mutation that forgets either rule silently breaks sync conflict resolution. `lastOpenedResourceId` is
+device-local and deliberately not stamped.
 
 All mutations are immutable `setState` updates. Two invariants are maintained by convention, not by types:
 - **Active focus timer** = the single `timeEntry` with `type: 'focus'` and `endedAt === null`. Anything that
@@ -84,15 +101,31 @@ that — and re-validates against the real clock on submit.
 
 `save_workbench` (`src-tauri/src/lib.rs`) is a **full snapshot replace**: it deletes all rows in `tasks`,
 `time_entries`, `checkins` and reinserts inside one transaction. Don't assume incremental writes or row-level
-history exist.
+history exist. The `sync` metadata (`device_id`, `sync_cursor`, …) is written to the `settings` table in that
+same transaction, so a sync cursor can never advance without the data it pulled.
+
+**Always write settings through `write_setting()`**, which deletes the key when the value is `None`.
+`settings.value` is `NOT NULL`, and an `INSERT OR REPLACE` of `NULL` aborts — which rolls back the *whole* save.
+Up to v0.7.4 `lastOpenedResourceId` was written that way, so nothing was persisted on a fresh install until a
+resource had been opened, or after 「清空全部」 (fixed in the sync release).
+
+Schema changes go through `migrate()`, keyed on `PRAGMA user_version` (`SCHEMA_VERSION`). Each migration runs
+in one transaction; before migrating a database that has data, it writes a consistent copy with
+`VACUUM INTO` (`workbench.backup-schema<N>-<unixtime>.sqlite3` in the app data dir — plain file copies can miss
+WAL contents). New columns must be nullable: a downgraded build still inserts rows without them, and `load`
+backfills with `COALESCE`. Never edit an existing `MIGRATION_Vn` — add `V(n+1)`.
 
 ### Type mirroring across the FFI boundary
 
 `src/types.ts` and the Rust structs in `src-tauri/src/lib.rs` are hand-mirrored. Rust uses
 `#[serde(rename_all = "camelCase")]`, plus `TimeEntry.entry_type` ↔ `"type"` and a `url` alias on
-`TaskResource.target` for old payloads. **Adding or renaming a field means editing three places**: the TS
-interface, the Rust struct, and the `CREATE TABLE` / `INSERT` / `SELECT` SQL in `init_db` + the two commands.
-`tasks.resources` is not a table — it is serialized to the `resources_json` column.
+`TaskResource.target` for old payloads. **Adding a field means editing four places**: the TS interface, the
+Rust struct (with `#[serde(default)]`), a new nullable column in a new `MIGRATION_Vn`, and the `INSERT` /
+`SELECT` in `save_workbench` / `load_workbench`. Do **not** add the column to `init_db`'s `CREATE TABLE`:
+a fresh database runs `init_db` and then every migration, so the `ALTER TABLE ADD COLUMN` would fail as a
+duplicate. Fields inside a resource need no migration — `tasks.resources` is serialized to the
+`resources_json` column. A field that should sync also has to round-trip through `server/` untouched, which
+it does automatically: the server stores each record's `data` as opaque JSON.
 
 ### Resources and platform capability split
 
@@ -102,6 +135,12 @@ the `open_resource` command, which shells out to `open` / `start` / `xdg-open` p
 `open_resource` signals a missing file/app by returning the literal error string `RESOURCE_NOT_FOUND`; the
 frontend substring-matches it and prompts the user to unlink the resource from the task. Preserve that sentinel
 on both sides if you touch it. `open_external` rejects anything that isn't `http(s)://`.
+
+File/app resources carry the `deviceId` of the Mac that added them, because their `target` is an absolute
+path on that machine. `isRemoteResource()` gates opening **and** the unlink prompt: offering "取消关联" for
+another Mac's path would sync the deletion back and remove a perfectly valid resource there. When a task is
+edited, `normalizeResource` keeps the old `deviceId` unless the kind or path changed. Resources from before
+sync existed are claimed for the local device on load (`claimLegacyResources`), before the first sync.
 
 `isTauri()` (`src/lib/tauri.ts`) sniffs `__TAURI_INTERNALS__` on `window` — use it for any capability gate.
 
@@ -192,6 +231,58 @@ click focuses the tab. It has no action button — the Web Notification API only
 shown through a Service Worker, which the app doesn't have. Autoplay policy keeps an `AudioContext` silent unless created or resumed inside a user
 gesture, so `primeAlerts()` runs from the 开始 button's click; a pomodoro started from the tray may therefore
 have a muted chime in the foreground case, though the background case uses the system sound regardless.
+
+### Multi-device sync (desktop only)
+
+Several Macs sync through the user's own server (public IP, no domain). Four pieces:
+
+- **`server/src/protocol.ts`** — the wire types and the conflict rule, imported by *both* the server and the
+  client (`src/sync/*` imports it as `../../server/src/protocol.ts`). Change the rule here and nowhere else.
+- **`server/`** — Node 24, zero third-party deps (`node:https`, `node:sqlite`), runs the `.ts` sources directly.
+  `store.ts` keeps one row per record; `app.ts` is the HTTP handler (TLS-agnostic, so tests drive it over
+  plain HTTP); `main.ts` refuses to start without TLS. Scripts: `gen-cert.sh`, `install.sh`, `deploy.sh`,
+  `backup.sh` — see `server/README.md`.
+- **`src-tauri/src/sync_client.rs` / `sync.rs`** — HTTPS transport. The webview never talks to the server;
+  Rust forwards the frontend's request verbatim and returns the JSON (same "Rust doesn't interpret" rule as the
+  tray). `sync_client.rs` has no Tauri dependency so it can be compiled and tested standalone.
+- **`src/sync/merge.ts`, `engine.ts`, `src/hooks/useSync.ts`** — collect, push/pull, merge. Pure, injected
+  dependencies, covered end to end in `tests/sync.test.ts` (two simulated Macs against the real server code).
+
+Rules that the code depends on:
+
+- **Conflicts are record-level last-writer-wins on `updatedAt`**; a tombstone is just another write. Ties are
+  broken by the canonical JSON of the content so every party picks the same winner. Two Macs editing different
+  fields of one task concurrently lose one edit — accepted for single-user use.
+- **"What changed" uses the server's `seq`, never device clocks.** Each accepted write gets the next `seq`; the
+  client keeps a `cursor`. Clocks only decide conflicts, which is why the settings dialog warns on clock skew.
+- **Pushes use a watermark** (`sync.pushedUntil` = start time of the last *completed* sync) minus a 60 s
+  overlap. Re-pushing is harmless because the server ignores writes that aren't newer.
+- **`serverId`** is random per server database. When it changes (server rebuilt), the engine restarts the round
+  from scratch (`syncFrom(deps, true)`) — it can't rely on resetting the store first, because React applies
+  `update` only on the next render.
+- **Invariant repair happens only on the server** (`invariants.ts`): two open check-ins or focus timers (two
+  Macs clocked in offline) → keep the latest-started one, close the others at its start. The repair's
+  `updatedAt` is `max(now, involved + 1ms)`, or a Mac with a fast clock would win the old open version back.
+- **Mass-delete guard:** if one sync would tombstone more than `MASS_DELETE_THRESHOLD` (20) visible local records,
+  the user is asked first; declining applies nothing, keeps the cursor, and pauses auto-sync until a manual sync.
+- **Never apply partial garbage:** the engine rejects the whole response if any record fails `parseSyncRecord`.
+- **Merges that change nothing return the same `store` object.** `useSync` re-syncs 5 s after `tasks` /
+  `timeEntries` / `checkins` change; a no-op merge that produced a new object would loop forever.
+
+Security: the server is HTTPS-only with a self-made CA (`gen-cert.sh` writes its own OpenSSL config — the
+system default adds `CA:TRUE` to `req -x509` certs, which rustls rejects as a server cert). The client uses
+reqwest's `tls_certs_only([pasted CA])`, which disables every built-in root, so only certificates from that CA
+pass. Re-running `gen-cert.sh` reuses the CA and re-issues the leaf, so Macs need no reconfiguration. The token
+is ≥ 32 chars, compared with `timingSafeEqual` over SHA-256 digests, rate-limited per IP, never logged, and on
+macOS stored in the Keychain (`security-framework`); `sync_get_config` reports only `hasToken`, never the value.
+Unsigned builds get a new code signature each release, so macOS may ask once to allow Keychain access after
+an update.
+
+Overlapping check-ins (typically two Macs' histories merged on the first sync) are not auto-resolved:
+`findOverlappingCheckinIds()` marks them 时间重叠 in the Time page history for the user to fix.
+
+What is **not** verified locally: `sync.rs`'s macOS Keychain branch and the real `#[tauri::command]` expansion
+only compile on macOS CI. The other sync Rust code was compiled standalone against the real dependencies.
 
 ### Navigation quirk
 

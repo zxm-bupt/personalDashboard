@@ -14,6 +14,7 @@ interface TasksPageProps {
   onOpenResource: (taskId: string, resource: TaskResource) => void
   onOpenAllResources: (task: Task) => void
   onNewTask: () => void
+  localDeviceId: string | null
 }
 
 const filters: Array<{ id: TaskFilter; label: string }> = [
@@ -34,6 +35,7 @@ export function TasksPage({
   onOpenResource,
   onOpenAllResources,
   onNewTask,
+  localDeviceId,
 }: TasksPageProps) {
   const [filter, setFilter] = useState<TaskFilter>('all')
   const [keyword, setKeyword] = useState('')
@@ -116,6 +118,7 @@ export function TasksPage({
               onDelete={onDeleteTask}
               onOpenResource={onOpenResource}
               onOpenAllResources={onOpenAllResources}
+              localDeviceId={localDeviceId}
             />
           ))
         ) : (

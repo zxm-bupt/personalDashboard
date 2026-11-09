@@ -1,0 +1,13 @@
+{
+  "name": "personal-workbench-sync-server",
+  "private": true,
+  "description": "个人工作台的多设备同步服务。零第三方依赖，Node 直接运行 TypeScript。",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test \"test/**/*.test.ts\""
+  }
+}

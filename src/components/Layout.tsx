@@ -3,11 +3,20 @@ import type { AppSection } from '../types'
 import { formatFullDate } from '../utils'
 import { BrandMark } from './BrandMark'
 
+/** 顶栏上的同步状态按钮，只在桌面端提供。 */
+export interface SyncIndicator {
+  label: string
+  tone: 'idle' | 'ok' | 'busy' | 'warn' | 'error'
+  title: string
+  onClick: () => void
+}
+
 interface LayoutProps {
   section: AppSection
   onSectionChange: (section: AppSection) => void
   onExport: () => void
   onClear: () => void
+  sync?: SyncIndicator | null
   children: ReactNode
 }
 
@@ -28,6 +37,7 @@ export function Layout({
   onSectionChange,
   onExport,
   onClear,
+  sync,
   children,
 }: LayoutProps) {
   const heading = sectionTitles[section]
@@ -68,6 +78,17 @@ export function Layout({
           </div>
 
           <div className="topbar-actions">
+            {sync && (
+              <button
+                type="button"
+                className={`button ghost sync-indicator sync-${sync.tone}`}
+                onClick={sync.onClick}
+                title={sync.title}
+              >
+                <span className="sync-dot" aria-hidden="true" />
+                {sync.label}
+              </button>
+            )}
             <button type="button" className="button ghost" onClick={onExport}>
               导出数据
             </button>

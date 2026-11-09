@@ -11,6 +11,7 @@ import {
   toDateKey,
 } from '../utils'
 import { TaskCard } from '../components/TaskCard'
+import { isRemoteResource } from '../data/records'
 
 interface DashboardPageProps {
   tasks: Task[]
@@ -22,6 +23,7 @@ interface DashboardPageProps {
   onOpenResource: (taskId: string, resource: TaskResource) => void
   onOpenAllResources: (task: Task) => void
   onNewTask: () => void
+  localDeviceId: string | null
 }
 
 export function DashboardPage({
@@ -34,6 +36,7 @@ export function DashboardPage({
   onOpenResource,
   onOpenAllResources,
   onNewTask,
+  localDeviceId,
 }: DashboardPageProps) {
   const pendingTasks = sortTasks(tasks.filter((task) => task.status !== 'done'))
   const todayTasks = pendingTasks.filter(
@@ -113,6 +116,7 @@ export function DashboardPage({
                 onDelete={onDeleteTask}
                 onOpenResource={onOpenResource}
                 onOpenAllResources={onOpenAllResources}
+                localDeviceId={localDeviceId}
               />
             ))
           ) : (
@@ -142,7 +146,14 @@ export function DashboardPage({
                 <button
                   key={resource.id}
                   type="button"
-                  className="quick-link"
+                  className={
+                    isRemoteResource(resource, localDeviceId) ? 'quick-link is-remote' : 'quick-link'
+                  }
+                  title={
+                    isRemoteResource(resource, localDeviceId)
+                      ? '在其他设备上添加，这台 Mac 上打不开'
+                      : undefined
+                  }
                   onClick={() => onOpenResource(task.id, resource)}
                 >
                   <span className="quick-link-icon">

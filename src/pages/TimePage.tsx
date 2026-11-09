@@ -8,6 +8,7 @@ import {
   formatTime,
   sortTimeEntries,
   summarizeCheckins,
+  findOverlappingCheckinIds,
   summarizeCompletedCheckins,
   toDateKey,
 } from '../utils'
@@ -65,6 +66,7 @@ export function TimePage({
   const todayCheckins = checkins.filter((checkin) => checkin.date === today)
   // 每秒重新汇总，进行中的那段才能跟着 now 一起走
   const checkinSummary = summarizeCheckins(checkins, today)
+  const overlappingCheckins = useMemo(() => findOverlappingCheckinIds(checkins), [checkins])
   const focusToday = timeEntries
     .filter((entry) => entry.type === 'focus' && toDateKey(entry.startedAt) === today)
     .reduce((total, entry) => total + durationSeconds(entry.startedAt, entry.endedAt), 0)
@@ -271,7 +273,10 @@ export function TimePage({
         <div className="section-header compact">
           <div>
             <h2>打卡历史</h2>
-            <p>最近 {checkins.length} 条</p>
+            <p>
+              最近 {checkins.length} 条
+              {overlappingCheckins.size > 0 && ` · ${overlappingCheckins.size} 条时间重叠，请修改或删除其中一条`}
+            </p>
           </div>
           {checkins.length > 0 && (
             <button
@@ -295,6 +300,14 @@ export function TimePage({
                 <span>
                   {checkin.date} · {formatTime(checkin.clockInAt)}
                   {checkin.note && <small className="checkin-tag">{checkin.note}</small>}
+                  {overlappingCheckins.has(checkin.id) && (
+                    <small
+                      className="checkin-tag is-warning"
+                      title="和另一条打卡的时间重叠，本月统计会把重叠部分算两次"
+                    >
+                      时间重叠
+                    </small>
+                  )}
                 </span>
                 <span className="simple-list-actions">
                   <small>{checkin.clockOutAt ? `下班 ${formatTime(checkin.clockOutAt)}` : '进行中'}</small>

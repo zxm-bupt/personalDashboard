@@ -2,21 +2,53 @@ import { useEffect, useRef, useState } from 'react'
 import { CheckinForm } from './components/CheckinForm'
 import type { CheckinFormValue } from './components/CheckinForm'
 import { Layout } from './components/Layout'
+import type { SyncIndicator } from './components/Layout'
 import { PomodoroAlert } from './components/PomodoroAlert'
+import { SyncSettings } from './components/SyncSettings'
 import { TaskForm } from './components/TaskForm'
 import { describePhaseComplete, usePomodoro } from './hooks/usePomodoro'
 import type { PomodoroPhase, PomodoroPhaseCompleteEvent } from './hooks/usePomodoro'
 import { listenPomodoroStartNext, raisePomodoroAlert } from './lib/alert'
+import { useSync } from './hooks/useSync'
+import type { SyncController } from './hooks/useSync'
 import { useTray } from './hooks/useTray'
 import { useWorkbench } from './hooks/useWorkbench'
 import { DashboardPage } from './pages/DashboardPage'
 import { TasksPage } from './pages/TasksPage'
 import { TimePage } from './pages/TimePage'
 import type { AppSection, Checkin, Task, TaskInput } from './types'
+import { formatTime } from './utils'
+
+/** 顶栏同步按钮：只在桌面端出现，网页版没有同步。 */
+function syncIndicator(sync: SyncController, open: () => void): SyncIndicator | null {
+  if (!sync.available) return null
+  if (!sync.config?.configured) {
+    return { label: '设置同步', tone: 'idle', title: '在几台 Mac 之间同步数据', onClick: open }
+  }
+  if (sync.phase === 'syncing') {
+    return { label: '同步中…', tone: 'busy', title: '正在和服务器同步', onClick: open }
+  }
+  if (sync.phase === 'error') {
+    return { label: '同步失败', tone: 'error', title: sync.message ?? '同步失败', onClick: open }
+  }
+  if (sync.phase === 'paused') {
+    return { label: '同步已暂停', tone: 'warn', title: sync.message ?? '等待确认', onClick: open }
+  }
+  return {
+    label: sync.lastSyncAt ? `已同步 ${formatTime(sync.lastSyncAt)}` : '等待同步',
+    tone: 'ok',
+    title: '点击查看同步设置',
+    onClick: open,
+  }
+}
 
 function App() {
   const {
     state,
+    store,
+    ready,
+    deviceId,
+    updateStore,
     activeTimer,
     createTask,
     updateTask,
@@ -39,6 +71,9 @@ function App() {
     clearCheckins,
     clearAll,
   } = useWorkbench()
+
+  const sync = useSync({ store, ready, updateStore })
+  const [syncSettingsOpen, setSyncSettingsOpen] = useState(false)
 
   const [pomodoroAlert, setPomodoroAlert] = useState<PomodoroPhaseCompleteEvent | null>(null)
 
@@ -160,6 +195,7 @@ function App() {
         onSectionChange={setSection}
         onExport={exportData}
         onClear={clearAll}
+        sync={syncIndicator(sync, () => setSyncSettingsOpen(true))}
       >
         {section === 'dashboard' && (
           <DashboardPage
@@ -172,6 +208,7 @@ function App() {
             onOpenResource={openTaskResource}
             onOpenAllResources={openAllTaskResources}
             onNewTask={openNewTask}
+            localDeviceId={deviceId}
           />
         )}
 
@@ -187,6 +224,7 @@ function App() {
             onOpenResource={openTaskResource}
             onOpenAllResources={openAllTaskResources}
             onNewTask={openNewTask}
+            localDeviceId={deviceId}
           />
         )}
 
@@ -229,6 +267,10 @@ function App() {
         onClose={closeCheckinForm}
         onSubmit={handleCheckinSubmit}
       />
+
+      {syncSettingsOpen && (
+        <SyncSettings sync={sync} onClose={() => setSyncSettingsOpen(false)} />
+      )}
 
       {pomodoroAlert && (
         <PomodoroAlert
