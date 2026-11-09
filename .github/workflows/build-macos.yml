@@ -14,7 +14,9 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: macos-14
+    # macos-14 was retired on 2026-11-02. Pinned rather than macos-latest so the
+    # image (and its Xcode) can't change under a release without notice.
+    runs-on: macos-15
 
     steps:
       - name: Checkout
