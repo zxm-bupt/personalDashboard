@@ -51,7 +51,22 @@ jobs:
 
       # Unsigned for now: Windows shows a SmartScreen warning on first run.
       - name: Build Tauri Windows x64
-        run: pnpm tauri build --target x86_64-pc-windows-msvc
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm tauri build --target x86_64-pc-windows-msvc 2>&1 | tee build.log
+
+      # Job logs need an authenticated download, but check-run annotations are public.
+      # On failure, surface the tail of the build output as an annotation so the real
+      # error is readable without logging in.
+      - name: Report build failure
+        if: failure()
+        shell: bash
+        run: |
+          [ -f build.log ] || exit 0
+          tail -n 60 build.log | sed -e 's/\x1b\[[0-9;]*[A-Za-z]//g' > tail.log
+          message=$(sed -e 's/%/%25/g' -e 's/\r/%0D/g' tail.log | awk '{printf "%s%%0A", $0}')
+          echo "::error title=tauri build output (last 60 lines)::${message}"
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
